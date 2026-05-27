@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
-import '../../features/home/homepage.dart';
+import '../../features/home/home_page.dart';
 import '../../features/layanan/layanan_page.dart';
+import '../../features/komunitas/komunitas_page.dart';
 import '../../features/profile/profil_page.dart';
 
 class AppRouter {
   AppRouter._();
 
-  static const String home    = '/';
-  static const String layanan = '/layanan';
-  static const String profil  = '/profil';
+  static const String home      = '/';
+  static const String layanan   = '/layanan';
+  static const String komunitas = '/komunitas';
+  static const String profil    = '/profil';
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -16,6 +18,8 @@ class AppRouter {
         return _fade(const HomePage());
       case layanan:
         return _fade(const LayananPage());
+      case komunitas:
+        return _fade(const KomunitasPage());
       case profil:
         return _fade(const ProfilPage());
       default:

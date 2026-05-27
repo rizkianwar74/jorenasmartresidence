@@ -15,13 +15,13 @@ class BottomNavBar extends StatelessWidget {
   final double contentMaxWidth;
 
   static const _items = [
-    (icon: Icons.home_filled,  label: 'Home',      route: AppRouter.home),
+    (icon: Icons.home_filled,  label: 'Beranda',   route: AppRouter.home),
     (icon: Icons.grid_view,    label: 'Layanan',   route: AppRouter.layanan),
-    (icon: Icons.groups,       label: 'Komunitas', route: ''),
+    (icon: Icons.groups,       label: 'Komunitas', route: AppRouter.komunitas),
     (icon: Icons.person,       label: 'Profil',    route: AppRouter.profil),
   ];
 
-  // Route yang dibuka dengan push (bisa di-back), bukan replace
+  // Route yang dibuka dengan push (bisa di-back)
   static const _pushRoutes = {AppRouter.profil};
 
   void _onTap(BuildContext context, int index) {

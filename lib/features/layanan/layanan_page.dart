@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/responsive_helper.dart';
 import '../../shared/widgets/bottom_nav_bar.dart';
 import 'widgets/service_card.dart';
 import 'widgets/service_help_banner.dart';
@@ -43,7 +44,24 @@ class LayananPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Jumlah kolom grid: 2 di mobile, 4 di tablet/desktop
+    final crossAxisCount = Responsive.value<int>(
+      context,
+      mobile: 2,
+      tablet: 4,
+      desktop: 4,
+    );
+
+    // Rasio kartu: lebih tinggi di mobile agar subtitle tidak overflow
+    final aspectRatio = Responsive.value<double>(
+      context,
+      mobile: 0.85,
+      tablet: 0.90,
+      desktop: 0.90,
+    );
+
     return Scaffold(
+      backgroundColor: const Color(0xFFF6F7F8),
       body: Stack(
         children: [
           Center(
@@ -73,10 +91,10 @@ class LayananPage extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 24),
                       child: GridView.count(
-                        crossAxisCount: 2,
+                        crossAxisCount: crossAxisCount,
                         crossAxisSpacing: 16,
                         mainAxisSpacing: 16,
-                        childAspectRatio: 1.0,
+                        childAspectRatio: aspectRatio,
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         children: _services
@@ -87,9 +105,7 @@ class LayananPage extends StatelessWidget {
                                 bgIconColor: s.bgIconColor,
                                 title: s.title,
                                 subtitle: s.subtitle,
-                                onTap: () {
-                                  // TODO: navigasi ke halaman masing-masing layanan
-                                },
+                                onTap: () {},
                               ),
                             )
                             .toList(),
@@ -99,9 +115,7 @@ class LayananPage extends StatelessWidget {
                     const SizedBox(height: 24),
 
                     ServiceHelpBanner(
-                      onTap: () {
-                        // TODO: hubungi building management
-                      },
+                      onTap: () {},
                     ),
                   ],
                 ),

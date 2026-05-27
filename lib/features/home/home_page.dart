@@ -1,27 +1,30 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/bottom_nav_bar.dart';
-import 'widgets.dart/home_header.dart';
-import 'widgets.dart/quick_action_card.dart';
-import 'widgets.dart/news_carousel.dart';
-import 'widgets.dart/unit_status_card.dart';
+import 'widgets/home_header.dart';
+import 'widgets/quick_action_card.dart';
+import 'widgets/news_carousel.dart';
+import 'widgets/unit_status_card.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
   static const double _contentMaxWidth = 600.0;
 
+  // Ganti nilai ini untuk simulasi kondisi tagihan
+  static const bool _sudahLunas = false;
+
   static const _newsList = [
     NewsItem(
       imageUrl: 'https://picsum.photos/id/1/400/250',
-      category: 'Keamanan',
-      title: 'Penangkapan Maling di Kompleks',
+      category: 'Fasilitas',
+      title: 'Renovasi Clubhouse Selesai',
       date: '12 Okt 2023',
     ),
     NewsItem(
       imageUrl: 'https://picsum.photos/id/200/400/250',
-      category: 'Kehilangan',
-      title: 'Kucing Pak Owi Hilang',
+      category: 'Kegiatan',
+      title: 'Sesi Yoga Aktif',
       date: '14 Okt 2023',
     ),
     NewsItem(
@@ -48,12 +51,10 @@ class HomePage extends StatelessWidget {
                     SizedBox(height: MediaQuery.of(context).padding.top),
 
                     HomeHeader(
-                      userName: 'Budi',
+                      userName: 'Alex',
                       greeting: 'Selamat Pagi',
                       notificationCount: 3,
-                      onNotificationTap: () {
-                        // TODO: navigasi ke halaman notifikasi
-                      },
+                      onNotificationTap: () {},
                     ),
 
                     Padding(
@@ -63,19 +64,19 @@ class HomePage extends StatelessWidget {
                       ),
                       child: Row(
                         children: [
+                          // Kartu tagihan — dinamis berdasarkan status
                           Expanded(
-                            child: QuickActionCard(
-                              icon: Icons.account_balance_wallet_outlined,
-                              iconColor: AppColors.primary,
-                              bgIconColor: AppColors.primary.withOpacity(0.1),
-                              title: 'Bayar Tagihan',
-                              subtitle: '3 TAGIHAN AKTIF',
-                              onTap: () {
-                                // TODO: navigasi ke halaman tagihan
+                            child: TagihanCard(
+                              namaPenghuni: 'Alex Pratama',
+                              jumlahTagihan: 'Rp 450.000',
+                              sudahLunas: _sudahLunas,
+                              onBayarTap: () {
+                                // TODO: navigasi ke halaman pembayaran
                               },
                             ),
                           ),
                           const SizedBox(width: 16),
+                          // Kartu satpam
                           Expanded(
                             child: QuickActionCard(
                               icon: Icons.security,
@@ -94,12 +95,8 @@ class HomePage extends StatelessWidget {
 
                     NewsCarousel(
                       items: _newsList,
-                      onSeeAllTap: () {
-                        // TODO: navigasi ke semua berita
-                      },
-                      onNewsTap: (item) {
-                        // TODO: navigasi ke detail berita
-                      },
+                      onSeeAllTap: () {},
+                      onNewsTap: (item) {},
                     ),
 
                     UnitStatusCard(
