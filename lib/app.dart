@@ -19,7 +19,7 @@ class SmartResidenceApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      initialRoute: AppRouter.home,
+      initialRoute: AppRouter.splash,
       onGenerateRoute: AppRouter.onGenerateRoute,
     );
   }
