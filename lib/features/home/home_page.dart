@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/bottom_nav_bar.dart';
+import '../../core/router/app_router.dart';
 import 'widgets/home_header.dart';
 import 'widgets/quick_action_card.dart';
 import 'widgets/news_carousel.dart';
@@ -85,7 +86,7 @@ class HomePage extends StatelessWidget {
                               title: 'Panggil Satpam',
                               subtitle: 'RESPON CEPAT',
                               onTap: () {
-                                // TODO: trigger panggil satpam
+                                Navigator.pushNamed(context, AppRouter.security);
                               },
                             ),
                           ),

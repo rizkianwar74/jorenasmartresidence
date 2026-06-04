@@ -6,6 +6,7 @@ import '../../features/home/home_page.dart';
 import '../../features/layanan/layanan_page.dart';
 import '../../features/komunitas/komunitas_page.dart';
 import '../../features/profile/profil_page.dart';
+import '../../features/security/security_page.dart';
 
 class AppRouter {
   AppRouter._();
@@ -17,6 +18,7 @@ class AppRouter {
   static const String layanan   = '/layanan';
   static const String komunitas = '/komunitas';
   static const String profil    = '/profil';
+  static const String security  = '/security';
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -34,12 +36,13 @@ class AppRouter {
         return _fade(const KomunitasPage());
       case profil:
         return _fade(const ProfilPage());
+      case security:
+        return _slide(const SecurityPage());
       default:
         return _fade(const SplashScreen());
     }
   }
 
-  // Transisi fade — untuk halaman utama
   static PageRouteBuilder _fade(Widget page) {
     return PageRouteBuilder(
       pageBuilder: (_, __, ___) => page,
@@ -49,7 +52,6 @@ class AppRouter {
     );
   }
 
-  // Transisi slide dari bawah — untuk halaman form/detail
   static PageRouteBuilder _slide(Widget page) {
     return PageRouteBuilder(
       pageBuilder: (_, __, ___) => page,
