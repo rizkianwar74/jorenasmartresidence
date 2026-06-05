@@ -4,6 +4,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/responsive_helper.dart';
 import '../../shared/widgets/bottom_nav_bar.dart';
 import 'widgets/service_card.dart';
+import 'lapor_keluhan/lapor_keluhan_page.dart';
 import 'widgets/service_help_banner.dart';
 
 class LayananPage extends StatelessWidget {
@@ -27,18 +28,18 @@ class LayananPage extends StatelessWidget {
       subtitle: 'AREA & RUANG PUBLIK',
     ),
     _ServiceData(
-      icon: Icons.qr_code_2_outlined,
-      iconColor: AppColors.primary,
-      bgIconColor: Color(0xFFE8F0FD),
-      title: 'Izin Tamu',
-      subtitle: 'AKSES KEAMANAN',
-    ),
-    _ServiceData(
-      icon: Icons.warning_rounded,
+      icon: Icons.diamond_outlined,
       iconColor: Colors.red,
       bgIconColor: Color(0xFFFFEBEE),
       title: 'Darurat',
       subtitle: 'PUSAT BANTUAN 24/7',
+    ),
+    _ServiceData(
+      icon: Icons.restaurant_outlined,
+      iconColor: AppColors.primary,
+      bgIconColor: Color(0xFFE8F0FD),
+      title: 'Kantin',
+      subtitle: 'PESAN MAKANAN & MINUMAN',
     ),
   ];
 
@@ -99,14 +100,25 @@ class LayananPage extends StatelessWidget {
                         physics: const NeverScrollableScrollPhysics(),
                         children: _services
                             .map(
-                              (s) => ServiceCard(
-                                icon: s.icon,
-                                iconColor: s.iconColor,
-                                bgIconColor: s.bgIconColor,
-                                title: s.title,
-                                subtitle: s.subtitle,
-                                onTap: () {},
-                              ),
+                              (s) {
+                                VoidCallback? handler;
+                                if (s.title == 'Lapor Keluhan') {
+                                  handler = () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const LaporKeluhanPage(),
+                                    ),
+                                  );
+                                }
+                                return ServiceCard(
+                                  icon: s.icon,
+                                  iconColor: s.iconColor,
+                                  bgIconColor: s.bgIconColor,
+                                  title: s.title,
+                                  subtitle: s.subtitle,
+                                  onTap: handler,
+                                );
+                              },
                             )
                             .toList(),
                       ),
