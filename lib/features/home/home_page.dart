@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/data/berita_data.dart';
+import '../berita/berita_detail_page.dart';
+import '../berita/berita_list_page.dart';
 import '../../shared/widgets/bottom_nav_bar.dart';
 import '../../core/router/app_router.dart';
 import 'widgets/home_header.dart';
@@ -15,26 +18,18 @@ class HomePage extends StatelessWidget {
   // Ganti nilai ini untuk simulasi kondisi tagihan
   static const bool _sudahLunas = false;
 
-  static const _newsList = [
-    NewsItem(
-      imageUrl: 'https://picsum.photos/id/1/400/250',
-      category: 'Fasilitas',
-      title: 'Renovasi Clubhouse Selesai',
-      date: '12 Okt 2023',
-    ),
-    NewsItem(
-      imageUrl: 'https://picsum.photos/id/200/400/250',
-      category: 'Kegiatan',
-      title: 'Sesi Yoga Aktif',
-      date: '14 Okt 2023',
-    ),
-    NewsItem(
-      imageUrl: 'https://picsum.photos/id/58/400/250',
-      category: 'Keamanan',
-      title: 'Protokol Keamanan Baru',
-      date: '15 Okt 2023',
-    ),
-  ];
+  // Ambil 3 berita terbaru dari dummy database
+  static final _newsList = getBeritaTerbaru(limit: 3)
+      .map((b) => NewsItem(
+            imageUrl: b.imageUrl,
+            category: b.kategoriLabel,
+            title: b.judul,
+            date: b.tanggal,
+          ))
+      .toList();
+
+  // Referensi ke BeritaModel asli untuk navigasi detail
+  static final _beritaList = getBeritaTerbaru(limit: 3);
 
   @override
   Widget build(BuildContext context) {
@@ -96,8 +91,25 @@ class HomePage extends StatelessWidget {
 
                     NewsCarousel(
                       items: _newsList,
-                      onSeeAllTap: () {},
-                      onNewsTap: (item) {},
+                      onSeeAllTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const BeritaListPage(),
+                        ),
+                      ),
+                      onNewsTap: (item) {
+                        final index = _newsList.indexOf(item);
+                        if (index != -1) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => BeritaDetailPage(
+                                berita: _beritaList[index],
+                              ),
+                            ),
+                          );
+                        }
+                      },
                     ),
 
                     UnitStatusCard(

@@ -5,6 +5,8 @@ import '../../core/utils/responsive_helper.dart';
 import '../../shared/widgets/bottom_nav_bar.dart';
 import 'widgets/service_card.dart';
 import 'lapor_keluhan/lapor_keluhan_page.dart';
+import 'kantin/kantin_page.dart';
+import 'fasilitas/fasilitas_page.dart';
 import 'widgets/service_help_banner.dart';
 
 class LayananPage extends StatelessWidget {
@@ -107,6 +109,20 @@ class LayananPage extends StatelessWidget {
                                     context,
                                     MaterialPageRoute(
                                       builder: (_) => const LaporKeluhanPage(),
+                                    ),
+                                  );
+                                } else if (s.title == 'Booking Fasilitas') {
+                                  handler = () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const FasilitasPage(),
+                                    ),
+                                  );
+                                } else if (s.title == 'Kantin') {
+                                  handler = () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const KantinPage(),
                                     ),
                                   );
                                 }
