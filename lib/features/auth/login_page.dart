@@ -36,8 +36,8 @@ class _LoginPageState extends State<LoginPage> {
 
     if (!mounted) return;
 
-    final result = AuthRepository.login(
-      _usernameController.text,
+    final result = await AuthRepository.login(
+      _usernameController.text, // isi dengan email
       _passwordController.text,
     );
 
@@ -137,7 +137,7 @@ class _LoginPageState extends State<LoginPage> {
                         color: AppColors.textDark,
                       ),
                       decoration: _inputDecoration(
-                        hint: 'Masukkan username',
+                        hint: 'Masukkan email',
                         prefixIcon: Icons.person_outline,
                       ),
                       validator: (v) {
@@ -217,8 +217,8 @@ class _LoginPageState extends State<LoginPage> {
                           backgroundColor: AppColors.primary,
                           foregroundColor: Colors.white,
                           elevation: 0,
-                          disabledBackgroundColor:
-                              AppColors.primary.withOpacity(0.6),
+                          disabledBackgroundColor: AppColors.primary
+                              .withOpacity(0.6),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
@@ -328,16 +328,10 @@ class _LoginPageState extends State<LoginPage> {
   }) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: GoogleFonts.inter(
-        fontSize: 14,
-        color: AppColors.textGrey,
-      ),
+      hintStyle: GoogleFonts.inter(fontSize: 14, color: AppColors.textGrey),
       prefixIcon: Icon(prefixIcon, color: AppColors.textGrey, size: 20),
       suffixIcon: suffix != null
-          ? Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: suffix,
-            )
+          ? Padding(padding: const EdgeInsets.only(right: 12), child: suffix)
           : null,
       filled: true,
       fillColor: const Color(0xFFF6F7F8),

@@ -16,12 +16,12 @@ class RegisterPage extends StatefulWidget {
 class _RegisterPageState extends State<RegisterPage> {
   final _formKey = GlobalKey<FormState>();
 
-  final _namaController        = TextEditingController();
-  final _usernameController    = TextEditingController();
-  final _passwordController    = TextEditingController();
-  final _tanggalController     = TextEditingController();
-  final _blokController        = TextEditingController();
-  final _nomorController       = TextEditingController();
+  final _namaController = TextEditingController();
+  final _usernameController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _tanggalController = TextEditingController();
+  final _blokController = TextEditingController();
+  final _nomorController = TextEditingController();
 
   bool _obscurePassword = true;
   bool _isLoading = false;
@@ -70,12 +70,11 @@ class _RegisterPageState extends State<RegisterPage> {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
-    await Future.delayed(const Duration(milliseconds: 1000));
-    if (!mounted) return;
-    setState(() => _isLoading = false);
 
-    final error = AuthRepository.register(
-      username: _usernameController.text,
+    // Gunakan username sebagai email (tambah domain dummy)
+    // Atau ganti field username dengan email jika mau
+    final error = await AuthRepository.register(
+      email: _usernameController.text,
       password: _passwordController.text,
       namaLengkap: _namaController.text,
       blok: _blokController.text,
@@ -84,6 +83,7 @@ class _RegisterPageState extends State<RegisterPage> {
     );
 
     if (!mounted) return;
+    setState(() => _isLoading = false);
 
     if (error != null) {
       // Gagal — tampilkan pesan error (misal username sudah dipakai)
@@ -92,7 +92,9 @@ class _RegisterPageState extends State<RegisterPage> {
           content: Text(error, style: GoogleFonts.inter(fontSize: 13)),
           backgroundColor: Colors.red.shade600,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
           margin: const EdgeInsets.all(16),
         ),
       );
@@ -106,7 +108,9 @@ class _RegisterPageState extends State<RegisterPage> {
           ),
           backgroundColor: Colors.green.shade600,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
           margin: const EdgeInsets.all(16),
         ),
       );
@@ -313,8 +317,9 @@ class _RegisterPageState extends State<RegisterPage> {
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
                         elevation: 0,
-                        disabledBackgroundColor:
-                            AppColors.primary.withOpacity(0.6),
+                        disabledBackgroundColor: AppColors.primary.withOpacity(
+                          0.6,
+                        ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -418,20 +423,15 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 
-  TextStyle _inputTextStyle() => GoogleFonts.inter(
-        fontSize: 14,
-        color: AppColors.textDark,
-      );
+  TextStyle _inputTextStyle() =>
+      GoogleFonts.inter(fontSize: 14, color: AppColors.textDark);
 
   InputDecoration _inputDecoration({required String hint, Widget? suffix}) {
     return InputDecoration(
       hintText: hint,
       hintStyle: GoogleFonts.inter(fontSize: 14, color: AppColors.textGrey),
       suffixIcon: suffix != null
-          ? Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: suffix,
-            )
+          ? Padding(padding: const EdgeInsets.only(right: 12), child: suffix)
           : null,
       suffixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: 40),
       filled: true,
