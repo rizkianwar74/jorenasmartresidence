@@ -1,11 +1,12 @@
+// lib/features/home/home_page.dart
+// Update: nama user dan data unit sekarang dari AuthRepository,
+// bukan hardcoded 'Alex' / 'Blok A' / '42'.
+
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/data/berita_data.dart';
-import '../berita/berita_detail_page.dart';
-import '../berita/berita_list_page.dart';
 import '../../shared/widgets/bottom_nav_bar.dart';
 import '../../core/router/app_router.dart';
-import '../pembayaran/tagihan_page.dart';
+import '../auth/auth_repository.dart';
 import 'widgets/home_header.dart';
 import 'widgets/quick_action_card.dart';
 import 'widgets/news_carousel.dart';
@@ -15,25 +16,47 @@ class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
   static const double _contentMaxWidth = 600.0;
-
-  // Ganti nilai ini untuk simulasi kondisi tagihan
   static const bool _sudahLunas = false;
 
-  // Ambil 3 berita terbaru dari dummy database
-  static final _newsList = getBeritaTerbaru(limit: 3)
-      .map((b) => NewsItem(
-            imageUrl: b.imageUrl,
-            category: b.kategoriLabel,
-            title: b.judul,
-            date: b.tanggal,
-          ))
-      .toList();
+  static const _newsList = [
+    NewsItem(
+      imageUrl: 'https://picsum.photos/id/1/400/250',
+      category: 'Fasilitas',
+      title: 'Renovasi Clubhouse Selesai',
+      date: '12 Okt 2023',
+    ),
+    NewsItem(
+      imageUrl: 'https://picsum.photos/id/200/400/250',
+      category: 'Kegiatan',
+      title: 'Sesi Yoga Aktif',
+      date: '14 Okt 2023',
+    ),
+    NewsItem(
+      imageUrl: 'https://picsum.photos/id/58/400/250',
+      category: 'Keamanan',
+      title: 'Protokol Keamanan Baru',
+      date: '15 Okt 2023',
+    ),
+  ];
 
-  // Referensi ke BeritaModel asli untuk navigasi detail
-  static final _beritaList = getBeritaTerbaru(limit: 3);
+  // Ambil greeting berdasarkan jam
+  String _buildGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 11) return 'Selamat Pagi';
+    if (hour < 15) return 'Selamat Siang';
+    if (hour < 18) return 'Selamat Sore';
+    return 'Selamat Malam';
+  }
 
   @override
   Widget build(BuildContext context) {
+    // Ambil data dari AuthRepository — sudah diisi saat login
+    final user = AuthRepository.currentUser;
+    final namaDepan = user?.namaLengkap.split(' ').first ?? 'Pengguna';
+    final namaLengkap = user?.namaLengkap ?? 'Pengguna';
+    final blok = user?.blok ?? '-';
+    final nomorUnit = user?.nomorUnit ?? '-';
+
     return Scaffold(
       body: Stack(
         children: [
@@ -47,9 +70,10 @@ class HomePage extends StatelessWidget {
                   children: [
                     SizedBox(height: MediaQuery.of(context).padding.top),
 
+                    // Header — nama dari database
                     HomeHeader(
-                      userName: 'Alex',
-                      greeting: 'Selamat Pagi',
+                      userName: namaDepan,
+                      greeting: _buildGreeting(),
                       notificationCount: 3,
                       onNotificationTap: () {},
                     ),
@@ -61,22 +85,18 @@ class HomePage extends StatelessWidget {
                       ),
                       child: Row(
                         children: [
-                          // Kartu tagihan — dinamis berdasarkan status
+                          // Kartu tagihan — nama dari database
                           Expanded(
                             child: TagihanCard(
-                              namaPenghuni: 'Alex Pratama',
+                              namaPenghuni: namaLengkap,
                               jumlahTagihan: 'Rp 450.000',
                               sudahLunas: _sudahLunas,
                               onBayarTap: () {
-                                Navigator.pushNamed(
-                                  context,
-                                  AppRouter.tagihan,
-                                );
+                                // TODO: navigasi ke halaman pembayaran
                               },
                             ),
                           ),
                           const SizedBox(width: 16),
-                          // Kartu satpam
                           Expanded(
                             child: QuickActionCard(
                               icon: Icons.security,
@@ -85,7 +105,10 @@ class HomePage extends StatelessWidget {
                               title: 'Panggil Satpam',
                               subtitle: 'RESPON CEPAT',
                               onTap: () {
-                                Navigator.pushNamed(context, AppRouter.security);
+                                Navigator.pushNamed(
+                                  context,
+                                  AppRouter.security,
+                                );
                               },
                             ),
                           ),
@@ -95,30 +118,14 @@ class HomePage extends StatelessWidget {
 
                     NewsCarousel(
                       items: _newsList,
-                      onSeeAllTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const BeritaListPage(),
-                        ),
-                      ),
-                      onNewsTap: (item) {
-                        final index = _newsList.indexOf(item);
-                        if (index != -1) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => BeritaDetailPage(
-                                berita: _beritaList[index],
-                              ),
-                            ),
-                          );
-                        }
-                      },
+                      onSeeAllTap: () {},
+                      onNewsTap: (item) {},
                     ),
 
+                    // Unit status — blok & unit dari database
                     UnitStatusCard(
-                      blockName: 'Blok A',
-                      unitNumber: '42',
+                      blockName: blok,
+                      unitNumber: nomorUnit,
                       paymentStatus: PaymentStatus.paid,
                     ),
                   ],

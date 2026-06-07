@@ -1,7 +1,15 @@
+// lib/features/profile/profil_page.dart
+// Update:
+// - Semua data (nama, email, blok, unit, role) dari AuthRepository
+// - Badge role dinamis (PEMILIK UNIT / SATPAM / ADMINISTRATOR)
+// - Avatar dari initial nama jika tidak ada foto
+// - Tombol Keluar aktif dengan konfirmasi dialog + navigate ke login
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/router/app_router.dart';
+import '../auth/auth_repository.dart';
 import 'widgets/profile_avatar.dart';
 import 'widgets/unit_info_card.dart';
 import 'widgets/personal_info_card.dart';
@@ -12,26 +20,115 @@ class ProfilPage extends StatelessWidget {
 
   static const double _contentMaxWidth = 600.0;
 
-  static const _infoItems = [
-    PersonalInfoItem(
-      icon: Icons.email_outlined,
-      value: 'alex.pratama@email.com',
-      label: 'Email',
-    ),
-    PersonalInfoItem(
-      icon: Icons.smartphone_outlined,
-      value: '+62 812 3456 7890',
-      label: 'Nomor HP',
-    ),
-    PersonalInfoItem(
-      icon: Icons.badge_outlined,
-      value: 'SR-9921042',
-      label: 'ID Pelanggan',
-    ),
-  ];
+  // ── Label & warna badge per role ────────────────────────────────────────
+  String _roleLabel(UserRole role) => switch (role) {
+        UserRole.admin   => 'ADMINISTRATOR',
+        UserRole.satpam  => 'PETUGAS KEAMANAN',
+        UserRole.user    => 'PEMILIK UNIT',
+      };
+
+  Color _roleBgColor(UserRole role) => switch (role) {
+        UserRole.admin   => Colors.amber.shade50,
+        UserRole.satpam  => Colors.teal.shade50,
+        UserRole.user    => AppColors.primaryLight,
+      };
+
+  Color _roleTextColor(UserRole role) => switch (role) {
+        UserRole.admin   => Colors.amber.shade800,
+        UserRole.satpam  => Colors.teal.shade700,
+        UserRole.user    => AppColors.primary,
+      };
+
+  // ── Avatar URL dari inisial nama ────────────────────────────────────────
+  String _avatarUrl(String nama) {
+    final encoded = Uri.encodeComponent(nama);
+    return 'https://ui-avatars.com/api/?name=$encoded&background=1173D4&color=fff&size=200';
+  }
+
+  // ── Konfirmasi logout ────────────────────────────────────────────────────
+  Future<void> _onLogout(BuildContext context) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Text(
+          'Keluar dari Akun?',
+          style: GoogleFonts.inter(fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'Anda akan keluar dan perlu login kembali untuk mengakses aplikasi.',
+          style: GoogleFonts.inter(
+            fontSize: 14,
+            color: AppColors.textGrey,
+            height: 1.5,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(
+              'Batal',
+              style: GoogleFonts.inter(color: AppColors.textGrey),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(
+              'Keluar',
+              style: GoogleFonts.inter(
+                color: Colors.red,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await AuthRepository.logout();
+      if (context.mounted) {
+        // Kembali ke login, hapus semua route sebelumnya
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          AppRouter.login,
+          (route) => false,
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    // Ambil data dari AuthRepository — sudah terisi saat login
+    final user = AuthRepository.currentUser;
+    final namaLengkap = user?.namaLengkap ?? 'Pengguna';
+    final email       = user?.username ?? '-';
+    final blok        = user?.blok ?? '-';
+    final nomorUnit   = user?.nomorUnit ?? '-';
+    final role        = user?.role ?? UserRole.user;
+
+    // Info card — dinamis dari data user
+    final infoItems = [
+      PersonalInfoItem(
+        icon: Icons.email_outlined,
+        value: email,
+        label: 'Email',
+      ),
+      PersonalInfoItem(
+        icon: Icons.apartment_outlined,
+        value: blok.isEmpty || blok == '-' ? 'Belum diisi' : blok,
+        label: 'Blok',
+      ),
+      PersonalInfoItem(
+        icon: Icons.door_front_door_outlined,
+        value: nomorUnit.isEmpty || nomorUnit == '-' ? 'Belum diisi' : 'No. $nomorUnit',
+        label: 'Nomor Unit',
+      ),
+    ];
+
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7F8),
       appBar: AppBar(
@@ -61,9 +158,9 @@ class ProfilPage extends StatelessWidget {
               children: [
                 const SizedBox(height: 24),
 
-                // --- Avatar ---
+                // ── Avatar dari inisial nama ───────────────────────────
                 ProfileAvatar(
-                  imageUrl: 'https://i.pravatar.cc/200?img=8',
+                  imageUrl: _avatarUrl(namaLengkap),
                   onEditTap: () {
                     // TODO: ganti foto profil
                   },
@@ -71,34 +168,35 @@ class ProfilPage extends StatelessWidget {
 
                 const SizedBox(height: 16),
 
-                // --- Nama ---
+                // ── Nama dari database ─────────────────────────────────
                 Text(
-                  'Alex Pratama',
+                  namaLengkap,
                   style: GoogleFonts.inter(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
                     color: AppColors.textDark,
                   ),
+                  textAlign: TextAlign.center,
                 ),
 
                 const SizedBox(height: 8),
 
-                // --- Badge role ---
+                // ── Badge role dinamis ─────────────────────────────────
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.1),
+                    color: _roleBgColor(role),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    'PEMILIK UNIT',
+                    _roleLabel(role),
                     style: GoogleFonts.inter(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.primary,
+                      color: _roleTextColor(role),
                       letterSpacing: 0.8,
                     ),
                   ),
@@ -106,20 +204,20 @@ class ProfilPage extends StatelessWidget {
 
                 const SizedBox(height: 24),
 
-                // --- Kartu Blok/Unit ---
-                const UnitInfoCard(
-                  blockName: 'Blok A',
-                  unitNumber: 'No. 42',
+                // ── Kartu Blok/Unit — dari database ───────────────────
+                UnitInfoCard(
+                  blockName: blok == '-' || blok.isEmpty ? '-' : blok,
+                  unitNumber: nomorUnit == '-' || nomorUnit.isEmpty ? '-' : nomorUnit,
                 ),
 
                 const SizedBox(height: 28),
 
-                // --- Informasi Pribadi ---
-                const PersonalInfoCard(items: _infoItems),
+                // ── Informasi Pribadi — dari database ─────────────────
+                PersonalInfoCard(items: infoItems),
 
                 const SizedBox(height: 28),
 
-                // --- Menu ---
+                // ── Menu ──────────────────────────────────────────────
                 ProfileMenuItem(
                   icon: Icons.settings_outlined,
                   label: 'Pengaturan Akun',
@@ -139,13 +237,11 @@ class ProfilPage extends StatelessWidget {
 
                 const SizedBox(height: 28),
 
-                // --- Tombol Keluar ---
+                // ── Tombol Keluar — aktif dengan konfirmasi ───────────
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: OutlinedButton.icon(
-                    onPressed: () {
-                      // TODO: logout
-                    },
+                    onPressed: () => _onLogout(context),
                     icon: const Icon(
                       Icons.logout_rounded,
                       color: Colors.red,
@@ -171,7 +267,7 @@ class ProfilPage extends StatelessWidget {
 
                 const SizedBox(height: 24),
 
-                // --- Footer versi ---
+                // ── Footer versi ───────────────────────────────────────
                 Text(
                   'SMART RESIDENCE V2.4.1',
                   style: GoogleFonts.inter(
