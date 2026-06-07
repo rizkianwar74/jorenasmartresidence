@@ -7,12 +7,10 @@ class WargaListItem extends StatelessWidget {
   const WargaListItem({
     super.key,
     required this.warga,
-    this.onChatTap,
     this.onTap,
   });
 
   final WargaModel warga;
-  final VoidCallback? onChatTap;
   final VoidCallback? onTap;
 
   @override
@@ -96,26 +94,6 @@ class WargaListItem extends StatelessWidget {
                     ),
                   ),
                 ],
-              ),
-            ),
-
-            const SizedBox(width: 12),
-
-            // Tombol chat
-            GestureDetector(
-              onTap: onChatTap,
-              child: Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF25D366).withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.chat_rounded,
-                  color: Color(0xFF25D366),
-                  size: 22,
-                ),
               ),
             ),
           ],

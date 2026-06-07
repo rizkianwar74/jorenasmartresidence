@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "751238632242",
+    "project_id": "jorenaresidence-f9074",
+    "storage_bucket": "jorenaresidence-f9074.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:751238632242:android:5d5e8f83d4f439d1cc3d2b",
+        "android_client_info": {
+          "package_name": "com.example.aplikasismartresidence"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC5BLgxPO8P03jnj595aWATlJcHMHVOx5g"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

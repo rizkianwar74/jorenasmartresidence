@@ -7,6 +7,7 @@ import '../../features/layanan/layanan_page.dart';
 import '../../features/komunitas/komunitas_page.dart';
 import '../../features/profile/profil_page.dart';
 import '../../features/security/security_page.dart';
+import '../../features/pembayaran/tagihan_page.dart';
 
 class AppRouter {
   AppRouter._();
@@ -19,6 +20,7 @@ class AppRouter {
   static const String komunitas = '/komunitas';
   static const String profil    = '/profil';
   static const String security  = '/security';
+  static const String tagihan = '/tagihan';
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -38,6 +40,8 @@ class AppRouter {
         return _fade(const ProfilPage());
       case security:
         return _slide(const SecurityPage());
+      case tagihan:
+        return _slide(const TagihanPage());
       default:
         return _fade(const SplashScreen());
     }

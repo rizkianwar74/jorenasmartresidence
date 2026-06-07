@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/responsive_helper.dart';
 import '../../core/router/app_router.dart';
 import '../../shared/widgets/bottom_nav_bar.dart';
 import 'warga_model.dart';
@@ -159,9 +160,6 @@ class _KomunitasPageState extends State<KomunitasPage> {
                             itemCount: _filteredList.length,
                             itemBuilder: (_, i) => WargaListItem(
                               warga: _filteredList[i],
-                              onChatTap: () {
-                                // TODO: buka chat dengan warga
-                              },
                               onTap: () {
                                 // TODO: buka profil warga
                               },

@@ -5,6 +5,7 @@ import '../berita/berita_detail_page.dart';
 import '../berita/berita_list_page.dart';
 import '../../shared/widgets/bottom_nav_bar.dart';
 import '../../core/router/app_router.dart';
+import '../pembayaran/tagihan_page.dart';
 import 'widgets/home_header.dart';
 import 'widgets/quick_action_card.dart';
 import 'widgets/news_carousel.dart';
@@ -67,7 +68,10 @@ class HomePage extends StatelessWidget {
                               jumlahTagihan: 'Rp 450.000',
                               sudahLunas: _sudahLunas,
                               onBayarTap: () {
-                                // TODO: navigasi ke halaman pembayaran
+                                Navigator.pushNamed(
+                                  context,
+                                  AppRouter.tagihan,
+                                );
                               },
                             ),
                           ),
