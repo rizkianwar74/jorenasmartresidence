@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import '../../features/splash/splash_screen.dart';
 import '../../features/auth/login_page.dart';
 import '../../features/auth/register_page.dart';
+import '../../features/auth/auth_repository.dart';
 import '../../features/home/home_page.dart';
 import '../../features/layanan/layanan_page.dart';
 import '../../features/komunitas/komunitas_page.dart';
 import '../../features/profile/profil_page.dart';
 import '../../features/security/security_page.dart';
 import '../../features/pembayaran/tagihan_page.dart';
+import '../../features/home/satpam_home_page.dart';
 
 class AppRouter {
   AppRouter._();
@@ -16,6 +18,7 @@ class AppRouter {
   static const String login     = '/login';
   static const String register  = '/register';
   static const String home      = '/home';
+  static const String satpamHome  = '/satpam-home';
   static const String layanan   = '/layanan';
   static const String komunitas = '/komunitas';
   static const String profil    = '/profil';
@@ -31,7 +34,14 @@ class AppRouter {
       case register:
         return _slide(const RegisterPage());
       case home:
+        final role = AuthRepository.currentUser?.role;
+        if (role == UserRole.satpam) {
+          return _fade(const SatpamHomePage());
+        }
         return _fade(const HomePage());
+
+      case satpamHome:
+        return _fade(const SatpamHomePage());
       case layanan:
         return _fade(const LayananPage());
       case komunitas:
