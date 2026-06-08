@@ -21,127 +21,90 @@ class BeritaDetailPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final hPad = Responsive.value<double>(context, mobile: 20, tablet: 32);
     final titleSize =
-        Responsive.value<double>(context, mobile: 24, tablet: 28);
+        Responsive.value<double>(context, mobile: 22, tablet: 26);
 
     return Scaffold(
       backgroundColor: Colors.white,
-      body: CustomScrollView(
-        slivers: [
-          // ── SliverAppBar dengan hero image ────────────────────────────
-          SliverAppBar(
-            expandedHeight:
-                Responsive.value<double>(context, mobile: 260, tablet: 340),
-            pinned: true,
-            backgroundColor: Colors.white,
-            elevation: 0,
-            scrolledUnderElevation: 0,
-            leading: Padding(
-              padding: const EdgeInsets.all(8),
-              child: GestureDetector(
-                onTap: () => Navigator.pop(context),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.9),
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 8,
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.arrow_back_ios_new,
-                    size: 16,
-                    color: Colors.black87,
-                  ),
-                ),
-              ),
-            ),
-            title: Text(
-              'Berita Komunitas',
-              style: GoogleFonts.inter(
-                fontSize: 17,
-                fontWeight: FontWeight.bold,
-                color: AppColors.primary,
-              ),
-            ),
-            centerTitle: true,
-            flexibleSpace: FlexibleSpaceBar(
-              background: Stack(
-                fit: StackFit.expand,
-                children: [
-                  // Gambar hero
-                  Image.network(
-                    berita.imageUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
-                      color: Colors.grey.shade200,
-                      child: const Icon(Icons.broken_image_outlined,
-                          size: 48, color: Colors.grey),
-                    ),
-                    loadingBuilder: (_, child, progress) {
-                      if (progress == null) return child;
-                      return Container(
-                        color: Colors.grey.shade100,
-                        child: const Center(
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      );
-                    },
-                  ),
-                  // Gradient overlay bawah
-                  Positioned(
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    height: 80,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.bottomCenter,
-                          end: Alignment.topCenter,
-                          colors: [
-                            Colors.black.withOpacity(0.3),
-                            Colors.transparent,
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Badge kategori
-                  Positioned(
-                    top: 100,
-                    left: hPad,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        berita.kategoriLabel.toUpperCase(),
-                        style: GoogleFonts.inter(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, size: 18),
+          color: AppColors.textDark,
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(
+          'Berita Komunitas',
+          style: GoogleFonts.inter(
+            fontSize: 17,
+            fontWeight: FontWeight.bold,
+            color: AppColors.primary,
           ),
+        ),
+        centerTitle: true,
+      ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 680),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Hero image full-width ──────────────────────────────
+                Stack(
+                  children: [
+                    SizedBox(
+                      width: double.infinity,
+                      height: Responsive.value<double>(
+                          context, mobile: 230, tablet: 300),
+                      child: Image.network(
+                        berita.imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          color: Colors.grey.shade200,
+                          child: const Icon(Icons.broken_image_outlined,
+                              size: 48, color: Colors.grey),
+                        ),
+                        loadingBuilder: (_, child, progress) {
+                          if (progress == null) return child;
+                          return Container(
+                            color: Colors.grey.shade100,
+                            child: const Center(
+                              child:
+                                  CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    // Badge kategori
+                    Positioned(
+                      top: 12,
+                      left: 16,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          berita.kategoriLabel.toUpperCase(),
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
 
-          // ── Konten artikel ────────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 680),
-                child: Padding(
+                // ── Konten artikel ─────────────────────────────────────
+                Padding(
                   padding:
                       EdgeInsets.symmetric(horizontal: hPad, vertical: 24),
                   child: Column(
@@ -197,7 +160,7 @@ class BeritaDetailPage extends StatelessWidget {
                       ),
 
                       const SizedBox(height: 20),
-                      Divider(color: Colors.grey.shade100),
+                      Divider(color: Colors.grey.shade200),
                       const SizedBox(height: 20),
 
                       // Isi artikel
@@ -218,10 +181,10 @@ class BeritaDetailPage extends StatelessWidget {
                     ],
                   ),
                 ),
-              ),
+              ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
