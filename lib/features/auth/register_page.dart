@@ -18,6 +18,8 @@ class _RegisterPageState extends State<RegisterPage> {
 
   final _namaController = TextEditingController();
   final _usernameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _nomorHpController = TextEditingController();
   final _passwordController = TextEditingController();
   final _tanggalController = TextEditingController();
   final _blokController = TextEditingController();
@@ -30,6 +32,8 @@ class _RegisterPageState extends State<RegisterPage> {
   void dispose() {
     _namaController.dispose();
     _usernameController.dispose();
+    _emailController.dispose();
+    _nomorHpController.dispose();
     _passwordController.dispose();
     _tanggalController.dispose();
     _blokController.dispose();
@@ -74,7 +78,9 @@ class _RegisterPageState extends State<RegisterPage> {
     // Gunakan username sebagai email (tambah domain dummy)
     // Atau ganti field username dengan email jika mau
     final error = await AuthRepository.register(
-      email: _usernameController.text,
+      username: _usernameController.text,
+      email: _emailController.text,
+      nomorHp: _nomorHpController.text,
       password: _passwordController.text,
       namaLengkap: _namaController.text,
       blok: _blokController.text,
@@ -135,7 +141,7 @@ class _RegisterPageState extends State<RegisterPage> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          'EstateFlow',
+          'Register',
           style: GoogleFonts.inter(
             fontSize: 18,
             fontWeight: FontWeight.bold,
@@ -207,6 +213,55 @@ class _RegisterPageState extends State<RegisterPage> {
                       }
                       if (v.trim().length < 3) {
                         return 'Username minimal 3 karakter';
+                      }
+                      return null;
+                    },
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // --- Email ---
+                  _FieldLabel('EMAIL'),
+                  const SizedBox(height: 8),
+                  _buildTextField(
+                    controller: _emailController,
+                    hint: 'Masukkan alamat email',
+                    keyboardType: TextInputType.emailAddress,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.deny(RegExp(r'\s')),
+                    ],
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) {
+                        return 'Email tidak boleh kosong';
+                      }
+                      final emailRegex = RegExp(
+                        r'^[\w\.\+\-]+@[\w\-]+\.[a-zA-Z]{2,}$',
+                      );
+                      if (!emailRegex.hasMatch(v.trim())) {
+                        return 'Format email tidak valid';
+                      }
+                      return null;
+                    },
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // --- Nomor HP ---
+                  _FieldLabel('NOMOR HP'),
+                  const SizedBox(height: 8),
+                  _buildTextField(
+                    controller: _nomorHpController,
+                    hint: 'Contoh: 08123456789',
+                    keyboardType: TextInputType.phone,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                    ],
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) {
+                        return 'Nomor HP tidak boleh kosong';
+                      }
+                      if (v.trim().length < 10 || v.trim().length > 14) {
+                        return 'Nomor HP tidak valid';
                       }
                       return null;
                     },

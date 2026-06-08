@@ -137,7 +137,7 @@ class _LoginPageState extends State<LoginPage> {
                         color: AppColors.textDark,
                       ),
                       decoration: _inputDecoration(
-                        hint: 'Masukkan email',
+                        hint: 'Masukkan username',
                         prefixIcon: Icons.person_outline,
                       ),
                       validator: (v) {
