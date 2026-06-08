@@ -9,6 +9,8 @@ import '../../features/komunitas/komunitas_page.dart';
 import '../../features/profile/profil_page.dart';
 import '../../features/pembayaran/tagihan_page.dart';
 import '../../features/home/satpam_home_page.dart';
+import '../../features/security/security_page.dart';
+import '../../features/security/bantuan/bantuan_satpam_page.dart';
 import '../../features/security/satpam_patroli_page.dart';
 import '../../features/security/satpam_reports_page.dart';
 import '../../features/security/satpam_catat_tamu_page.dart';
@@ -25,8 +27,9 @@ class AppRouter {
   static const String layanan   = '/layanan';
   static const String komunitas = '/komunitas';
   static const String profil    = '/profil';
-  static const String security  = '/security';
-  static const String tagihan = '/tagihan';
+  static const String security      = '/security';
+  static const String bantuanSatpam = '/bantuan-satpam';
+  static const String tagihan       = '/tagihan';
   static const String satpamPatroli   = '/satpam/patroli';
   static const String satpamReports   = '/satpam/reports';
   static const String satpamCatatTamu = '/satpam/catat-tamu';
@@ -54,6 +57,10 @@ class AppRouter {
         return _fade(const KomunitasPage());
       case profil:
         return _fade(const ProfilPage());
+      case security:
+        return _slide(const SecurityPage());
+      case bantuanSatpam:
+        return _slide(const BantuanSatpamPage());
       case tagihan:
         return _slide(const TagihanPage());
       case satpamPatroli:
