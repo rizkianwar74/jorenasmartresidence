@@ -2,56 +2,503 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/app_colors.dart';
 
-class SatpamCatatTamuPage extends StatelessWidget {
+class SatpamCatatTamuPage extends StatefulWidget {
   const SatpamCatatTamuPage({super.key});
+
+  @override
+  State<SatpamCatatTamuPage> createState() => _SatpamCatatTamuPageState();
+}
+
+class _SatpamCatatTamuPageState extends State<SatpamCatatTamuPage> {
+  static const double _contentMaxWidth = 600.0;
+
+  // Controllers
+  final _namaController       = TextEditingController();
+  final _platController       = TextEditingController();
+  final _keteranganController = TextEditingController();
+  final _blokController       = TextEditingController();
+  final _nomorRumahController = TextEditingController();
+
+  // State
+  String _jenisKendaraan = 'Mobil';
+  String? _kategoriKunjungan;
+
+  static const _jenisOptions    = ['Mobil', 'Motor', 'Lainnya'];
+  static const _kategoriOptions = [
+    'Keluarga / Kerabat',
+    'Teman',
+    'Kurir / Delivery',
+    'Tamu Bisnis',
+    'Teknisi / Servis',
+    'Lainnya',
+  ];
+
+  @override
+  void dispose() {
+    _namaController.dispose();
+    _platController.dispose();
+    _keteranganController.dispose();
+    _blokController.dispose();
+    _nomorRumahController.dispose();
+    super.dispose();
+  }
+
+  void _simpan() {
+    // TODO: simpan ke Firestore
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Data tamu berhasil disimpan & akses diberikan',
+          style: GoogleFonts.inter(fontSize: 13),
+        ),
+        backgroundColor: const Color(0xFF2E7D32),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+    Navigator.pop(context);
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F9),
+      backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, size: 18),
-          color: AppColors.textDark,
+          color: const Color(0xFF0D1B2A),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
           'Catat Tamu',
           style: GoogleFonts.inter(
-            fontSize: 17,
+            fontSize: 18,
             fontWeight: FontWeight.bold,
-            color: AppColors.primary,
+            color: const Color(0xFF0D1B2A),
           ),
         ),
-        centerTitle: true,
       ),
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.person_add_outlined,
-                size: 64, color: Colors.grey.shade300),
-            const SizedBox(height: 16),
-            Text(
-              'Halaman Catat Tamu',
-              style: GoogleFonts.inter(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textDark,
+      body: Column(
+        children: [
+          Divider(height: 1, color: Colors.grey.shade200),
+
+          // ── Scrollable form ──────────────────────────────────────────
+          Expanded(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: _contentMaxWidth),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 120),
+                  child: Column(
+                    children: [
+                      // ── Section 1: Informasi Tamu ──────────────────
+                      _FormSection(
+                        icon: Icons.person_outline,
+                        title: 'INFORMASI TAMU',
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _FieldLabel(label: 'Nama Lengkap Tamu'),
+                            const SizedBox(height: 6),
+                            _StyledTextField(
+                              controller: _namaController,
+                              hint: 'Contoh: Budi Santoso',
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 14),
+
+                      // ── Section 2: Detail Kendaraan ────────────────
+                      _FormSection(
+                        icon: Icons.directions_car_outlined,
+                        title: 'DETAIL KENDARAAN',
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _FieldLabel(label: 'Jenis Kendaraan'),
+                            const SizedBox(height: 8),
+
+                            // Toggle segmented
+                            Container(
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withOpacity(0.08),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              padding: const EdgeInsets.all(4),
+                              child: Row(
+                                children: _jenisOptions.map((opt) {
+                                  final isActive = _jenisKendaraan == opt;
+                                  return Expanded(
+                                    child: GestureDetector(
+                                      onTap: () => setState(
+                                          () => _jenisKendaraan = opt),
+                                      child: AnimatedContainer(
+                                        duration:
+                                            const Duration(milliseconds: 150),
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 10),
+                                        decoration: BoxDecoration(
+                                          color: isActive
+                                              ? Colors.white
+                                              : Colors.transparent,
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                          boxShadow: isActive
+                                              ? [
+                                                  BoxShadow(
+                                                    color: Colors.black
+                                                        .withOpacity(0.08),
+                                                    blurRadius: 6,
+                                                    offset:
+                                                        const Offset(0, 2),
+                                                  )
+                                                ]
+                                              : null,
+                                        ),
+                                        child: Text(
+                                          opt,
+                                          textAlign: TextAlign.center,
+                                          style: GoogleFonts.inter(
+                                            fontSize: 13,
+                                            fontWeight: isActive
+                                                ? FontWeight.bold
+                                                : FontWeight.w500,
+                                            color: isActive
+                                                ? AppColors.primary
+                                                : const Color(0xFF64748B),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+
+                            const SizedBox(height: 14),
+                            _FieldLabel(label: 'Nomor Plat Kendaraan'),
+                            const SizedBox(height: 6),
+                            _StyledTextField(
+                              controller: _platController,
+                              hint: 'B 1234 ABC',
+                              textCapitalization:
+                                  TextCapitalization.characters,
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 14),
+
+                      // ── Section 3: Tujuan Kunjungan ────────────────
+                      _FormSection(
+                        icon: Icons.assignment_outlined,
+                        title: 'TUJUAN KUNJUNGAN',
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _FieldLabel(label: 'Kategori Kunjungan'),
+                            const SizedBox(height: 6),
+
+                            // Dropdown
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                    color: AppColors.primary.withOpacity(0.4)),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 2),
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<String>(
+                                  value: _kategoriKunjungan,
+                                  isExpanded: true,
+                                  hint: Text(
+                                    'Pilih kategori...',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 14,
+                                      color: const Color(0xFFB0BEC5),
+                                    ),
+                                  ),
+                                  icon: const Icon(Icons.keyboard_arrow_down,
+                                      color: Color(0xFF64748B)),
+                                  items: _kategoriOptions
+                                      .map((k) => DropdownMenuItem(
+                                            value: k,
+                                            child: Text(
+                                              k,
+                                              style: GoogleFonts.inter(
+                                                  fontSize: 14,
+                                                  color: const Color(
+                                                      0xFF0D1B2A)),
+                                            ),
+                                          ))
+                                      .toList(),
+                                  onChanged: (v) =>
+                                      setState(() => _kategoriKunjungan = v),
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(height: 14),
+                            _FieldLabel(label: 'Keterangan Tambahan'),
+                            const SizedBox(height: 6),
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                    color: AppColors.primary.withOpacity(0.4)),
+                              ),
+                              child: TextField(
+                                controller: _keteranganController,
+                                maxLines: 3,
+                                style: GoogleFonts.inter(
+                                    fontSize: 14,
+                                    color: const Color(0xFF0D1B2A)),
+                                decoration: InputDecoration(
+                                  border: InputBorder.none,
+                                  contentPadding: const EdgeInsets.all(12),
+                                  hintText:
+                                      'Masukkan detail tambahan jika ada...',
+                                  hintStyle: GoogleFonts.inter(
+                                    fontSize: 13,
+                                    color: const Color(0xFFB0BEC5),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 14),
+
+                      // ── Section 4: Tujuan Rumah ────────────────────
+                      _FormSection(
+                        icon: Icons.home_outlined,
+                        title: 'TUJUAN RUMAH',
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _FieldLabel(label: 'Blok'),
+                                  const SizedBox(height: 6),
+                                  _StyledTextField(
+                                    controller: _blokController,
+                                    hint: 'Ex: A1',
+                                    textCapitalization:
+                                        TextCapitalization.characters,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _FieldLabel(label: 'Nomor Rumah'),
+                                  const SizedBox(height: 6),
+                                  _StyledTextField(
+                                    controller: _nomorRumahController,
+                                    hint: 'Ex: 08',
+                                    keyboardType: TextInputType.number,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Segera hadir',
-              style: GoogleFonts.inter(
-                fontSize: 14,
-                color: AppColors.textGrey,
+          ),
+        ],
+      ),
+
+      // ── Bottom Buttons (fixed) ─────────────────────────────────────
+      bottomNavigationBar: SafeArea(
+        child: Container(
+          color: Colors.white,
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          child: Row(
+            children: [
+              // Simpan & Beri Akses
+              Expanded(
+                flex: 3,
+                child: ElevatedButton.icon(
+                  onPressed: _simpan,
+                  icon: const Icon(Icons.how_to_reg_outlined,
+                      color: Colors.white, size: 18),
+                  label: Text(
+                    'Simpan & Beri Akses',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
               ),
-            ),
-          ],
+              const SizedBox(width: 12),
+              // Batal
+              Expanded(
+                flex: 2,
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    side: BorderSide(color: Colors.grey.shade300),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text(
+                    'Batal',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF64748B),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Section card dengan background biru muda
+// ─────────────────────────────────────────────────────────────────────────────
+class _FormSection extends StatelessWidget {
+  const _FormSection({
+    required this.icon,
+    required this.title,
+    required this.child,
+  });
+  final IconData icon;
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.primary.withOpacity(0.15)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Section header
+          Row(
+            children: [
+              Icon(icon, size: 16, color: AppColors.primary),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primary,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Label field
+// ─────────────────────────────────────────────────────────────────────────────
+class _FieldLabel extends StatelessWidget {
+  const _FieldLabel({required this.label});
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label,
+      style: GoogleFonts.inter(
+        fontSize: 13,
+        fontWeight: FontWeight.w500,
+        color: const Color(0xFF0D1B2A),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TextField dengan border primary
+// ─────────────────────────────────────────────────────────────────────────────
+class _StyledTextField extends StatelessWidget {
+  const _StyledTextField({
+    required this.controller,
+    required this.hint,
+    this.keyboardType,
+    this.textCapitalization = TextCapitalization.words,
+  });
+  final TextEditingController controller;
+  final String hint;
+  final TextInputType? keyboardType;
+  final TextCapitalization textCapitalization;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.primary.withOpacity(0.5)),
+      ),
+      child: TextField(
+        controller: controller,
+        keyboardType: keyboardType,
+        textCapitalization: textCapitalization,
+        style: GoogleFonts.inter(
+            fontSize: 14, color: const Color(0xFF0D1B2A)),
+        decoration: InputDecoration(
+          border: InputBorder.none,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+          hintText: hint,
+          hintStyle: GoogleFonts.inter(
+            fontSize: 14,
+            color: const Color(0xFFB0BEC5),
+          ),
         ),
       ),
     );
