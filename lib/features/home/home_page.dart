@@ -1,7 +1,3 @@
-// lib/features/home/home_page.dart
-// Update: nama user dan data unit sekarang dari AuthRepository,
-// bukan hardcoded 'Alex' / 'Blok A' / '42'.
-
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/bottom_nav_bar.dart';
@@ -20,6 +16,17 @@ class HomePage extends StatelessWidget {
 
   static const double _contentMaxWidth = 600.0;
   static const bool _sudahLunas = false;
+
+  // Data berita dari berita_data.dart
+  static final _beritaList = getBeritaTerbaru(limit: 3);
+  static final _newsList = _beritaList
+      .map((b) => NewsItem(
+            imageUrl: b.imageUrl,
+            category: b.kategoriLabel,
+            title: b.judul,
+            date: b.tanggal,
+          ))
+      .toList();
 
   // Ambil greeting berdasarkan jam
   String _buildGreeting() {
@@ -74,7 +81,10 @@ class HomePage extends StatelessWidget {
                               jumlahTagihan: 'Rp 450.000',
                               sudahLunas: _sudahLunas,
                               onBayarTap: () {
-                                // TODO: navigasi ke halaman pembayaran
+                                Navigator.pushNamed(
+                                  context,
+                                  AppRouter.tagihan,
+                                );
                               },
                             ),
                           ),
@@ -99,29 +109,27 @@ class HomePage extends StatelessWidget {
                     ),
 
                     NewsCarousel(
-                      items: getBeritaTerbaru(limit: 3).map((b) => NewsItem(
-                        imageUrl: b.imageUrl,
-                        category: b.kategoriLabel,
-                        title: b.judul,
-                        date: b.tanggal,
-                      )).toList(),
-                      onSeeAllTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const BeritaListPage(),
-                        ),
-                      ),
-                      onNewsTap: (item) {
-                        // Cari BeritaModel yang sesuai berdasarkan judul
-                        final berita = getBeritaTerbaru(limit: 3).firstWhere(
-                          (b) => b.judul == item.title,
-                        );
+                      items: _newsList,
+                      onSeeAllTap: () {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => BeritaDetailPage(berita: berita),
+                            builder: (_) => const BeritaListPage(),
                           ),
                         );
+                      },
+                      onNewsTap: (item) {
+                        final index = _newsList.indexOf(item);
+                        if (index != -1) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => BeritaDetailPage(
+                                berita: _beritaList[index],
+                              ),
+                            ),
+                          );
+                        }
                       },
                     ),
 
