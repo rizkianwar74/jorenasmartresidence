@@ -6,7 +6,10 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/bottom_nav_bar.dart';
 import '../../core/router/app_router.dart';
+import '../../core/data/berita_data.dart';
 import '../auth/auth_repository.dart';
+import '../berita/berita_detail_page.dart';
+import '../berita/berita_list_page.dart';
 import 'widgets/home_header.dart';
 import 'widgets/quick_action_card.dart';
 import 'widgets/news_carousel.dart';
@@ -17,27 +20,6 @@ class HomePage extends StatelessWidget {
 
   static const double _contentMaxWidth = 600.0;
   static const bool _sudahLunas = false;
-
-  static const _newsList = [
-    NewsItem(
-      imageUrl: 'https://picsum.photos/id/1/400/250',
-      category: 'Fasilitas',
-      title: 'Renovasi Clubhouse Selesai',
-      date: '12 Okt 2023',
-    ),
-    NewsItem(
-      imageUrl: 'https://picsum.photos/id/200/400/250',
-      category: 'Kegiatan',
-      title: 'Sesi Yoga Aktif',
-      date: '14 Okt 2023',
-    ),
-    NewsItem(
-      imageUrl: 'https://picsum.photos/id/58/400/250',
-      category: 'Keamanan',
-      title: 'Protokol Keamanan Baru',
-      date: '15 Okt 2023',
-    ),
-  ];
 
   // Ambil greeting berdasarkan jam
   String _buildGreeting() {
@@ -117,9 +99,30 @@ class HomePage extends StatelessWidget {
                     ),
 
                     NewsCarousel(
-                      items: _newsList,
-                      onSeeAllTap: () {},
-                      onNewsTap: (item) {},
+                      items: getBeritaTerbaru(limit: 3).map((b) => NewsItem(
+                        imageUrl: b.imageUrl,
+                        category: b.kategoriLabel,
+                        title: b.judul,
+                        date: b.tanggal,
+                      )).toList(),
+                      onSeeAllTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const BeritaListPage(),
+                        ),
+                      ),
+                      onNewsTap: (item) {
+                        // Cari BeritaModel yang sesuai berdasarkan judul
+                        final berita = getBeritaTerbaru(limit: 3).firstWhere(
+                          (b) => b.judul == item.title,
+                        );
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => BeritaDetailPage(berita: berita),
+                          ),
+                        );
+                      },
                     ),
 
                     // Unit status — blok & unit dari database
