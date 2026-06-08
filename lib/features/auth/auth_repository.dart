@@ -12,6 +12,7 @@ class AuthResult {
     required this.blok,
     required this.nomorUnit,
     required this.role,
+    this.photoUrl,
   });
 
   final String username;
@@ -19,6 +20,7 @@ class AuthResult {
   final String blok;
   final String nomorUnit;
   final UserRole role;
+  final String? photoUrl;
 }
 
 // ── Tiga role yang tersedia ──────────────────────────────────────────────────
@@ -70,12 +72,17 @@ class AuthRepository {
       final nomorUnit = data?['nomorUnit'] as String? ?? '-';
 
       // 4. Simpan ke state in-memory
+      final photoUrl = (data?['photoUrl'] as String?)?.isNotEmpty == true
+          ? data!['photoUrl'] as String
+          : user.photoURL;
+
       _currentUser = AuthResult(
         username: user.email ?? '',
         namaLengkap: namaLengkap,
         blok: blok,
         nomorUnit: nomorUnit,
         role: role,
+        photoUrl: photoUrl,
       );
 
       return _currentUser;

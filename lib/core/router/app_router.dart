@@ -7,9 +7,12 @@ import '../../features/home/home_page.dart';
 import '../../features/layanan/layanan_page.dart';
 import '../../features/komunitas/komunitas_page.dart';
 import '../../features/profile/profil_page.dart';
-import '../../features/security/security_page.dart';
 import '../../features/pembayaran/tagihan_page.dart';
 import '../../features/home/satpam_home_page.dart';
+import '../../features/security/satpam_patroli_page.dart';
+import '../../features/security/satpam_reports_page.dart';
+import '../../features/security/satpam_catat_tamu_page.dart';
+
 
 class AppRouter {
   AppRouter._();
@@ -24,6 +27,9 @@ class AppRouter {
   static const String profil    = '/profil';
   static const String security  = '/security';
   static const String tagihan = '/tagihan';
+  static const String satpamPatroli   = '/satpam/patroli';
+  static const String satpamReports   = '/satpam/reports';
+  static const String satpamCatatTamu = '/satpam/catat-tamu';
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -48,10 +54,14 @@ class AppRouter {
         return _fade(const KomunitasPage());
       case profil:
         return _fade(const ProfilPage());
-      case security:
-        return _slide(const SecurityPage());
       case tagihan:
         return _slide(const TagihanPage());
+      case satpamPatroli:
+        return _slide(const SatpamPatroliPage());
+      case satpamReports:
+        return _slide(const SatpamReportsPage());
+      case satpamCatatTamu:
+        return _slide(const SatpamCatatTamuPage());
       default:
         return _fade(const SplashScreen());
     }
