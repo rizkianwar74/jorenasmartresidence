@@ -1,0 +1,202 @@
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../../core/theme/app_colors.dart';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AdminTopBar — reusable di semua halaman admin
+//
+// Cara pakai (tanpa action):
+//   AdminTopBar(searchHint: 'Search...')
+//
+// Cara pakai (dengan tombol aksi):
+//   AdminTopBar(
+//     searchHint: 'Search residents...',
+//     actionButton: ElevatedButton.icon(
+//       onPressed: () {},
+//       icon: const Icon(Icons.add),
+//       label: const Text('Tambah Data'),
+//     ),
+//   )
+// ─────────────────────────────────────────────────────────────────────────────
+
+class AdminTopBar extends StatelessWidget {
+  const AdminTopBar({
+    super.key,
+    required this.searchHint,
+    this.actionButton,
+    this.adminName = 'Admin Utama',
+    this.adminRole = 'Super Admin',
+  });
+
+  final String searchHint;
+
+  /// Widget opsional di sebelah kanan search bar (misal tombol "+ Tambah Data")
+  final Widget? actionButton;
+
+  final String adminName;
+  final String adminRole;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 64,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Row(
+        children: [
+          // ── Search bar ────────────────────────────────────────────────
+          Expanded(
+            child: Container(
+              height: 40,
+              constraints: const BoxConstraints(maxWidth: 480),
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Row(
+                children: [
+                  const SizedBox(width: 12),
+                  Icon(Icons.search, size: 18, color: AppColors.textGrey),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      searchHint,
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        color: AppColors.textGrey,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(width: 16),
+
+          // ── Action button (opsional) ──────────────────────────────────
+          if (actionButton != null) ...[
+            actionButton!,
+            const SizedBox(width: 16),
+          ],
+
+          // ── Bell notification ─────────────────────────────────────────
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.background,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.notifications_outlined,
+                  size: 20,
+                  color: AppColors.textGrey,
+                ),
+              ),
+              Positioned(
+                top: 6,
+                right: 8,
+                child: Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: Colors.red,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(width: 16),
+
+          // ── Admin profile ─────────────────────────────────────────────
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: AppColors.primary.withOpacity(0.15),
+                child: Text(
+                  adminName.isNotEmpty ? adminName[0] : 'A',
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    adminName,
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textDark,
+                    ),
+                  ),
+                  Text(
+                    adminRole,
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: AppColors.textGrey,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helper: tombol "+ Tambah Data" yang dipakai di banyak halaman admin
+// ─────────────────────────────────────────────────────────────────────────────
+
+class AdminAddButton extends StatelessWidget {
+  const AdminAddButton({
+    super.key,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return ElevatedButton.icon(
+      onPressed: onPressed,
+      icon: const Icon(Icons.add, size: 18, color: Colors.white),
+      label: Text(
+        label,
+        style: GoogleFonts.inter(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: Colors.white,
+        ),
+      ),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+}

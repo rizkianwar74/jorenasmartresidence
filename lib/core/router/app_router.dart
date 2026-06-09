@@ -14,6 +14,12 @@ import '../../features/security/satpam_patroli_page.dart';
 import '../../features/security/satpam_reports_page.dart';
 import '../../features/security/satpam_catat_tamu_page.dart';
 import '../../features/pembayaran/tagihan_page.dart';
+import '../../features/admin/admin_home_page.dart';
+import '../../features/admin/warga_user_page.dart';
+import '../../features/admin/admin_security_page.dart';
+import '../../features/admin/admin_facilities_page.dart';
+import '../../features/admin/admin_reports_page.dart';
+import '../../features/admin/admin_berita_page.dart';
 
 class AppRouter {
   AppRouter._();
@@ -33,6 +39,12 @@ class AppRouter {
   static const String satpamPatroli   = '/satpam/patroli';
   static const String satpamReports   = '/satpam/reports';
   static const String satpamCatatTamu = '/satpam/catat-tamu';
+  static const String adminHome       = '/admin-home';
+  static const String adminWargaUser  = '/admin/warga-user';
+  static const String adminSecurity    = '/admin/security';
+  static const String adminFacilities  = '/admin/facilities';
+  static const String adminReports     = '/admin/reports';
+  static const String adminBerita      = '/admin/berita';
 
   // ── Route generator ───────────────────────────────────────────────
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
@@ -48,7 +60,22 @@ class AppRouter {
         if (role == UserRole.satpam) {
           return _fade(const SatpamHomePage());
         }
+        if (role == UserRole.admin) {
+          return _fade(const AdminHomePage());
+        }
         return _fade(const HomePage());
+      case adminHome:
+        return _fade(const AdminHomePage());
+      case adminWargaUser:
+        return _fade(const WargaUserPage());
+      case adminSecurity:
+        return _fade(const AdminSecurityPage());
+      case adminFacilities:
+        return _fade(const AdminFacilitiesPage());
+      case adminReports:
+        return _fade(const AdminReportsPage());
+      case adminBerita:
+        return _fade(const AdminBeritaPage());
       case satpamHome:
         return _fade(const SatpamHomePage());
       case layanan:
