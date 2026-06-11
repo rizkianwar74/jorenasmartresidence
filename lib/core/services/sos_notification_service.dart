@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+import 'dart:ui';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'sos_service.dart';
 
@@ -23,24 +26,27 @@ class SosNotificationService {
 
   // ── Inisialisasi — panggil sekali di main() ───────────────────────────────
   static Future<void> init() async {
-    if (_initialized) return;
+    if (kIsWeb || _initialized) return;
 
     const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
     const initSettings = InitializationSettings(android: androidInit);
 
     await _plugin.initialize(initSettings);
 
+    // Pola getar SOS: [delay, getar, jeda, getar, jeda, getar] dalam ms
+    final sosVibration = Int64List.fromList([0, 500, 300, 500, 300, 500]);
+
     // Buat channel SOS: alarm + getar terus, prioritas MAX
-    const sosChannel = AndroidNotificationChannel(
+    final sosChannel = AndroidNotificationChannel(
       _kSosChannelId,
       'SOS Darurat',
       description: 'Notifikasi darurat dari warga — membutuhkan respon segera',
       importance: Importance.max,
       playSound: true,
       enableVibration: true,
-      vibrationPattern: Int64List.fromList([0, 500, 300, 500, 300, 500]),
+      vibrationPattern: sosVibration,
       enableLights: true,
-      ledColor: Color(0xFFFF0000),
+      ledColor: const Color(0xFFFF0000),
     );
 
     // Buat channel CALL: suara notif biasa, tanpa getar
@@ -68,6 +74,8 @@ class SosNotificationService {
 
   // ── Tampilkan notifikasi SOS — alarm + getar terus ────────────────────────
   static Future<void> showSosNotification(SosAlert alert) async {
+    if (kIsWeb) return;
+    final vibration = Int64List.fromList([0, 500, 300, 500, 300, 500]);
     final androidDetails = AndroidNotificationDetails(
       _kSosChannelId,
       'SOS Darurat',
@@ -76,7 +84,7 @@ class SosNotificationService {
       priority: Priority.max,
       playSound: true,
       enableVibration: true,
-      vibrationPattern: Int64List.fromList([0, 500, 300, 500, 300, 500]),
+      vibrationPattern: vibration,
       // Full screen intent: muncul meski HP terkunci
       fullScreenIntent: true,
       ongoing: true, // tidak bisa di-dismiss sebelum ditangani
@@ -99,6 +107,7 @@ class SosNotificationService {
 
   // ── Tampilkan notifikasi CALL — suara sekali, tanpa getar ─────────────────
   static Future<void> showCallNotification(SosAlert alert) async {
+    if (kIsWeb) return;
     final androidDetails = AndroidNotificationDetails(
       _kCallChannelId,
       'Panggil Satpam',
@@ -126,16 +135,19 @@ class SosNotificationService {
 
   // ── Batalkan notifikasi SOS (setelah direspons) ───────────────────────────
   static Future<void> cancelSosNotification() async {
+    if (kIsWeb) return;
     await _plugin.cancel(_kSosNotifId);
   }
 
   // ── Batalkan notifikasi CALL ──────────────────────────────────────────────
   static Future<void> cancelCallNotification() async {
+    if (kIsWeb) return;
     await _plugin.cancel(_kCallNotifId);
   }
 
   // ── Batalkan semua notifikasi ─────────────────────────────────────────────
   static Future<void> cancelAll() async {
+    if (kIsWeb) return;
     await _plugin.cancelAll();
   }
 }

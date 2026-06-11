@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:audioplayers/audioplayers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/router/app_router.dart';
 import '../../core/services/sos_service.dart';
@@ -48,6 +49,12 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
 
   // ── Tracking alert yang sudah diberi notif (hindari duplikat) ────────────
   final Set<String> _notifiedIds = {};
+
+  // ── Timer repeat notifikasi selama ada alert PENDING ─────────────────────
+  Timer? _repeatTimer;
+
+  // ── Audio player untuk dering SOS ────────────────────────────────────────
+  final AudioPlayer _audioPlayer = AudioPlayer();
 
   // ── Stats ─────────────────────────────────────────────────────────────────
   final int _activePatrols = 2;
@@ -112,18 +119,50 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
           }
         }
       }
+
       if (mounted) setState(() => _activeAlerts = alerts);
+
+      // Kelola dering berdasarkan ada/tidaknya alert PENDING
+      final hasPending = alerts.any((a) => a.status == SosStatus.pending);
+      if (hasPending && _repeatTimer == null) {
+        // Play mp3 alarm dengan looping
+        await _audioPlayer.setReleaseMode(ReleaseMode.loop);
+        await _audioPlayer.setVolume(1.0);
+        await _audioPlayer.play(AssetSource('sounds/alarm_ringtone_sos.mp3'));
+        // Timer untuk haptic feedback setiap 3 detik
+        _repeatTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+          final stillPending =
+              _activeAlerts.any((a) => a.status == SosStatus.pending);
+          if (!stillPending) {
+            _stopRinging();
+            return;
+          }
+          HapticFeedback.heavyImpact();
+        });
+      } else if (!hasPending) {
+        _stopRinging();
+      }
     });
+  }
+
+  void _stopRinging() {
+    _repeatTimer?.cancel();
+    _repeatTimer = null;
+    _audioPlayer.stop();
   }
 
   @override
   void dispose() {
     _alertSub?.cancel();
+    _stopRinging();
+    _audioPlayer.dispose();
     super.dispose();
   }
 
   Future<void> _onMyWay(SosAlert alert) async {
     HapticFeedback.heavyImpact();
+    // Stop dering langsung tanpa tunggu Firestore callback
+    _stopRinging();
     final uid = FirebaseAuth.instance.currentUser?.uid;
     await SosService.updateStatus(
       alertId: alert.id,

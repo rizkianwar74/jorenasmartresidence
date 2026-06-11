@@ -143,18 +143,44 @@ class SosService {
   // ── Internal: tulis dokumen baru ke Firestore ─────────────────────────────
   static Future<SosAlert?> _send(SosType type) async {
     try {
-      final uid = FirebaseAuth.instance.currentUser?.uid;
-      final user = AuthRepository.currentUser;
+      final firebaseUser = FirebaseAuth.instance.currentUser;
+      if (firebaseUser == null) return null;
 
-      if (uid == null || user == null) return null;
+      final uid = firebaseUser.uid;
+
+      // Coba dari in-memory dulu (Android/normal flow).
+      // Fallback ke Firestore kalau null — terjadi di web setelah page refresh
+      // karena AuthRepository._currentUser adalah static in-memory variable.
+      final inMemory = AuthRepository.currentUser;
+      String namaWarga;
+      String blok;
+      String nomorUnit;
+
+      if (inMemory != null) {
+        namaWarga = inMemory.namaLengkap;
+        blok      = inMemory.blok;
+        nomorUnit = inMemory.nomorUnit;
+      } else {
+        final doc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .get();
+        if (!doc.exists) return null;
+        final d = doc.data()!;
+        namaWarga = (d['namaLengkap'] as String?)?.isNotEmpty == true
+            ? d['namaLengkap'] as String
+            : (firebaseUser.displayName ?? 'Pengguna');
+        blok      = (d['blok']      as String?) ?? '-';
+        nomorUnit = (d['nomorUnit'] as String?) ?? '-';
+      }
 
       final data = {
         'type': type == SosType.sos ? 'SOS' : 'CALL',
         'status': 'PENDING',
         'userId': uid,
-        'namaWarga': user.namaLengkap,
-        'blok': user.blok,
-        'nomorUnit': user.nomorUnit,
+        'namaWarga': namaWarga,
+        'blok': blok,
+        'nomorUnit': nomorUnit,
         'createdAt': FieldValue.serverTimestamp(),
         'respondedBy': null,
         'resolvedAt': null,
@@ -162,15 +188,14 @@ class SosService {
 
       final ref = await _col.add(data);
 
-      // Kembalikan SosAlert dengan id dokumen yang baru dibuat
       return SosAlert(
         id: ref.id,
         type: type,
         status: SosStatus.pending,
         userId: uid,
-        namaWarga: user.namaLengkap,
-        blok: user.blok,
-        nomorUnit: user.nomorUnit,
+        namaWarga: namaWarga,
+        blok: blok,
+        nomorUnit: nomorUnit,
         createdAt: DateTime.now(),
       );
     } catch (_) {
