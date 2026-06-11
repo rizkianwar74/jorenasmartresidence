@@ -141,14 +141,29 @@ class AuthRepository {
   }
 
   // ── Reset Password ────────────────────────────────────────────────────────
-  // Kirim email reset ke alamat yang terdaftar di Firebase Auth
+  // 1. Cek dulu apakah email terdaftar di Firestore
+  // 2. Jika ada, baru kirim reset email via Firebase Auth
   static Future<String?> resetPassword(String email) async {
     try {
+      final cleanEmail = email.trim().toLowerCase();
+
+      // Cek email di Firestore collection 'users'
+      final query = await FirebaseFirestore.instance
+          .collection('users')
+          .where('email', isEqualTo: cleanEmail)
+          .limit(1)
+          .get();
+
+      if (query.docs.isEmpty) {
+        return 'Email tidak terdaftar. Periksa kembali alamat email Anda.';
+      }
+
+      // Email ditemukan → kirim link reset
       await FirebaseAuth.instance
-          .sendPasswordResetEmail(email: email.trim().toLowerCase());
+          .sendPasswordResetEmail(email: cleanEmail);
+
       return null; // null = sukses
     } on FirebaseAuthException catch (e) {
-      if (e.code == 'user-not-found') return 'Email tidak terdaftar';
       if (e.code == 'invalid-email') return 'Format email tidak valid';
       return e.message ?? 'Terjadi kesalahan. Coba lagi.';
     } catch (e) {
