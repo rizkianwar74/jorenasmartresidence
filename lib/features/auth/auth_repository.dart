@@ -47,14 +47,12 @@ class AuthRepository {
   static bool get isLoggedIn => _currentUser != null;
 
   // ── Login ─────────────────────────────────────────────────────────────────
-  // Firebase Auth wajib pakai email — username dikonversi ke fake email internal
-  static Future<AuthResult?> login(String username, String password) async {
+  static Future<AuthResult?> login(String email, String password) async {
     try {
-      final email = '${username.trim().toLowerCase()}@gmail.com';
-
-      // 1. Login ke Firebase Auth
+      // 1. Login ke Firebase Auth dengan email asli
       final credential = await FirebaseAuth.instance
-          .signInWithEmailAndPassword(email: email, password: password);
+          .signInWithEmailAndPassword(
+              email: email.trim().toLowerCase(), password: password);
 
       final user = credential.user;
       if (user == null) return null;
@@ -65,7 +63,7 @@ class AuthRepository {
           .doc(user.uid)
           .get();
 
-      // 3. Ambil field dari Firestore (fallback ke nilai default jika belum ada)
+      // 3. Ambil field dari Firestore
       final data = doc.data();
       final role = _parseRole(data?['role'] as String?);
       final namaLengkap = (data?['namaLengkap'] as String?)?.isNotEmpty == true
@@ -73,14 +71,14 @@ class AuthRepository {
           : (user.displayName ?? 'Pengguna');
       final blok = data?['blok'] as String? ?? '-';
       final nomorUnit = data?['nomorUnit'] as String? ?? '-';
+      final username = data?['username'] as String? ?? '';
 
-      // 4. Simpan ke state in-memory
       final photoUrl = (data?['photoUrl'] as String?)?.isNotEmpty == true
           ? data!['photoUrl'] as String
           : user.photoURL;
 
       _currentUser = AuthResult(
-        username: username.trim().toLowerCase(),
+        username: username,
         namaLengkap: namaLengkap,
         blok: blok,
         nomorUnit: nomorUnit,
@@ -108,13 +106,10 @@ class AuthRepository {
     try {
       final cleanUsername = username.trim().toLowerCase();
 
-      // 1. Konversi username ke fake email (untuk Firebase Auth saja)
-      // Jika username sudah dipakai, Firebase Auth akan lempar email-already-in-use
-      final authEmail = '$cleanUsername@gmail.com';
-
-      // 2. Buat akun di Firebase Auth
+      // 1. Buat akun di Firebase Auth dengan email asli
       final credential = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(email: authEmail, password: password);
+          .createUserWithEmailAndPassword(
+              email: email.trim().toLowerCase(), password: password);
 
       final uid = credential.user?.uid;
       if (uid == null) return 'Gagal membuat akun';
@@ -140,6 +135,22 @@ class AuthRepository {
       if (e.code == 'email-already-in-use') return 'Username sudah digunakan';
       if (e.code == 'weak-password') return 'Password terlalu lemah';
       return e.message;
+    } catch (e) {
+      return 'Terjadi kesalahan. Coba lagi.';
+    }
+  }
+
+  // ── Reset Password ────────────────────────────────────────────────────────
+  // Kirim email reset ke alamat yang terdaftar di Firebase Auth
+  static Future<String?> resetPassword(String email) async {
+    try {
+      await FirebaseAuth.instance
+          .sendPasswordResetEmail(email: email.trim().toLowerCase());
+      return null; // null = sukses
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'user-not-found') return 'Email tidak terdaftar';
+      if (e.code == 'invalid-email') return 'Format email tidak valid';
+      return e.message ?? 'Terjadi kesalahan. Coba lagi.';
     } catch (e) {
       return 'Terjadi kesalahan. Coba lagi.';
     }

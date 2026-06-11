@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../features/splash/splash_screen.dart';
 import '../../features/auth/login_page.dart';
 import '../../features/auth/register_page.dart';
+import '../../features/auth/forgot_password_page.dart';
 import '../../features/auth/auth_repository.dart';
 import '../../features/home/home_page.dart';
 import '../../features/home/satpam_home_page.dart';
@@ -27,7 +28,8 @@ class AppRouter {
   // ── Route names ───────────────────────────────────────────────────
   static const String splash        = '/';
   static const String login         = '/login';
-  static const String register      = '/register';
+  static const String register        = '/register';
+  static const String forgotPassword  = '/forgot-password';
   static const String home          = '/home';
   static const String satpamHome    = '/satpam-home';
   static const String layanan       = '/layanan';
@@ -55,6 +57,8 @@ class AppRouter {
         return _fade(const LoginPage());
       case register:
         return _slide(const RegisterPage());
+      case forgotPassword:
+        return _slide(const ForgotPasswordPage());
       case home:
         final role = AuthRepository.currentUser?.role;
         if (role == UserRole.satpam) {
