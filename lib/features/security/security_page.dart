@@ -2,15 +2,57 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/services/sos_service.dart';
 import 'security_activity_model.dart';
 import 'bantuan/bantuan_satpam_page.dart';
+import 'sos_status_page.dart';
 import 'widgets/sos_button.dart';
 import 'widgets/activity_list_item.dart';
 
-class SecurityPage extends StatelessWidget {
+class SecurityPage extends StatefulWidget {
   const SecurityPage({super.key});
 
+  @override
+  State<SecurityPage> createState() => _SecurityPageState();
+}
+
+class _SecurityPageState extends State<SecurityPage> {
+  bool _isLoading = false;
+
   static const double _contentMaxWidth = 600.0;
+
+  Future<void> _onSosActivated() async {
+    if (_isLoading) return;
+    setState(() => _isLoading = true);
+
+    final alert = await SosService.sendSos();
+    setState(() => _isLoading = false);
+
+    if (!mounted) return;
+
+    if (alert != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => SosStatusPage(
+            alertId: alert.id,
+            type: SosType.sos,
+          ),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal mengirim SOS. Coba lagi.',
+              style: GoogleFonts.inter(fontSize: 13)),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -112,21 +154,7 @@ class SecurityPage extends StatelessWidget {
 
                         // SOS Button (hold 3 detik)
                         SosButton(
-                          onActivated: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'SOS dikirim! Satpam sedang menuju lokasi Anda.',
-                                  style: GoogleFonts.inter(fontSize: 13),
-                                ),
-                                backgroundColor: Colors.red.shade700,
-                                behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                              ),
-                            );
-                          },
+                          onActivated: _isLoading ? null : _onSosActivated,
                         ),
 
                         const SizedBox(height: 24),

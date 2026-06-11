@@ -1,8 +1,12 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/router/app_router.dart';
+import '../../core/services/sos_service.dart';
+import '../../core/services/sos_notification_service.dart';
 import '../auth/auth_repository.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -25,17 +29,6 @@ class _AktivitasItem {
   final String waktu;
 }
 
-class _SosAlertData {
-  const _SosAlertData({
-    required this.unitLabel,
-    required this.description,
-    required this.waktu,
-  });
-  final String unitLabel;
-  final String description;
-  final String waktu;
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Page
 // ─────────────────────────────────────────────────────────────────────────────
@@ -49,22 +42,19 @@ class SatpamHomePage extends StatefulWidget {
 class _SatpamHomePageState extends State<SatpamHomePage> {
   static const double _contentMaxWidth = 600.0;
 
-  // ── Mock SOS: set ke null jika tidak ada SOS aktif ───────────────────────
-  // Ganti dengan stream Firestore nanti:
-  // Stream<SosAlertData?> get _sosStream => FirebaseFirestore.instance
-  //     .collection('sos_alerts').where('status', isEqualTo: 'active')
-  //     .snapshots().map((s) => s.docs.isEmpty ? null : SosAlertData.fromDoc(s.docs.first));
-  _SosAlertData? _activeSos = const _SosAlertData(
-    unitLabel: 'Unit Blok A – No 12',
-    description: 'Resident requesting immediate assistance at the main entrance.',
-    waktu: '2 mins ago',
-  );
+  // ── Firestore stream untuk SOS/CALL aktif ─────────────────────────────────
+  StreamSubscription<List<SosAlert>>? _alertSub;
+  List<SosAlert> _activeAlerts = [];
 
-  // ── Mock Stats ────────────────────────────────────────────────────────────
+  // ── Tracking alert yang sudah diberi notif (hindari duplikat) ────────────
+  final Set<String> _notifiedIds = {};
+
+  // ── Stats ─────────────────────────────────────────────────────────────────
   final int _activePatrols = 2;
   final int _pendingReports = 5;
   final int _tamuHariIni = 8;
-  final int _insidenAktif = 1;
+
+  int get _insidenAktif => _activeAlerts.length;
 
   // ── Mock Aktivitas ────────────────────────────────────────────────────────
   static const _mockAktivitas = [
@@ -102,8 +92,58 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
     ),
   ];
 
-  void _dismissSos() {
-    setState(() => _activeSos = null);
+  @override
+  void initState() {
+    super.initState();
+    _startListening();
+  }
+
+  void _startListening() {
+    _alertSub = SosService.watchActiveAlerts().listen((alerts) async {
+      // Deteksi alert baru yang belum diberi notif
+      for (final alert in alerts) {
+        if (!_notifiedIds.contains(alert.id)) {
+          _notifiedIds.add(alert.id);
+          HapticFeedback.heavyImpact();
+          if (alert.type == SosType.sos) {
+            await SosNotificationService.showSosNotification(alert);
+          } else {
+            await SosNotificationService.showCallNotification(alert);
+          }
+        }
+      }
+      if (mounted) setState(() => _activeAlerts = alerts);
+    });
+  }
+
+  @override
+  void dispose() {
+    _alertSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _onMyWay(SosAlert alert) async {
+    HapticFeedback.heavyImpact();
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    await SosService.updateStatus(
+      alertId: alert.id,
+      status: SosStatus.onMyWay,
+      respondedBy: uid,
+    );
+    // Batalkan notif setelah direspons
+    if (alert.type == SosType.sos) {
+      await SosNotificationService.cancelSosNotification();
+    } else {
+      await SosNotificationService.cancelCallNotification();
+    }
+  }
+
+  Future<void> _onResolved(SosAlert alert) async {
+    HapticFeedback.mediumImpact();
+    await SosService.updateStatus(
+      alertId: alert.id,
+      status: SosStatus.resolved,
+    );
   }
 
   @override
@@ -139,26 +179,21 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
 
                       const SizedBox(height: 16),
 
-                      // ── SOS Alert (conditional) ──────────────────────
-                      if (_activeSos != null) ...[
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                      // ── SOS / CALL Alert Cards (realtime Firestore) ───
+                      if (_activeAlerts.isNotEmpty) ...[
+                        ..._activeAlerts.map((alert) => Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
                           child: _SosAlertCard(
-                            data: _activeSos!,
-                            onOnMyWay: () {
-                              HapticFeedback.heavyImpact();
-                              // TODO: update status 'on_my_way' ke Firestore
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Status dikirim: On My Way'),
-                                  backgroundColor: Color(0xFF2E7D32),
-                                ),
-                              );
-                            },
-                            onDismiss: _dismissSos,
+                            alert: alert,
+                            onOnMyWay: alert.status == SosStatus.pending
+                                ? () => _onMyWay(alert)
+                                : null,
+                            onResolved: alert.status == SosStatus.onMyWay
+                                ? () => _onResolved(alert)
+                                : null,
                           ),
-                        ),
-                        const SizedBox(height: 16),
+                        )),
+                        const SizedBox(height: 4),
                       ],
 
                       // ── Stats Grid ───────────────────────────────────
@@ -317,17 +352,26 @@ class _TopBar extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SOS Alert Card (conditional)
+// SOS / CALL Alert Card — realtime dari Firestore
 // ─────────────────────────────────────────────────────────────────────────────
 class _SosAlertCard extends StatelessWidget {
   const _SosAlertCard({
-    required this.data,
-    required this.onOnMyWay,
-    required this.onDismiss,
+    required this.alert,
+    this.onOnMyWay,
+    this.onResolved,
   });
-  final _SosAlertData data;
-  final VoidCallback onOnMyWay;
-  final VoidCallback onDismiss;
+  final SosAlert alert;
+  final VoidCallback? onOnMyWay;
+  final VoidCallback? onResolved;
+
+  bool get _isSos => alert.type == SosType.sos;
+
+  List<Color> get _gradientColors => _isSos
+      ? const [Color(0xFFD32F2F), Color(0xFFB71C1C)]
+      : const [Color(0xFF1565C0), Color(0xFF0D47A1)];
+
+  Color get _shadowColor =>
+      _isSos ? Colors.red : const Color(0xFF1565C0);
 
   @override
   Widget build(BuildContext context) {
@@ -335,15 +379,15 @@ class _SosAlertCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFFD32F2F), Color(0xFFB71C1C)],
+          colors: _gradientColors,
         ),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.red.withOpacity(0.3),
+            color: _shadowColor.withOpacity(0.3),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),
@@ -352,11 +396,12 @@ class _SosAlertCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header row: badge + dismiss
+          // ── Header: badge + status ──────────────────────────────────────
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.25),
                   borderRadius: BorderRadius.circular(4),
@@ -367,7 +412,7 @@ class _SosAlertCard extends StatelessWidget {
                     const Icon(Icons.circle, size: 7, color: Colors.white),
                     const SizedBox(width: 5),
                     Text(
-                      'SOS ACTIVE ALERT',
+                      _isSos ? 'SOS DARURAT' : 'PANGGIL SATPAM',
                       style: GoogleFonts.inter(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
@@ -379,37 +424,32 @@ class _SosAlertCard extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              // Waktu
-              Text(
-                data.waktu,
-                style: GoogleFonts.inter(
-                  fontSize: 11,
-                  color: Colors.white.withOpacity(0.75),
+              // Status badge
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(4),
                 ),
-              ),
-              const SizedBox(width: 8),
-              // Dismiss button
-              GestureDetector(
-                onTap: onDismiss,
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: const Icon(
-                    Icons.close_rounded,
-                    size: 14,
+                child: Text(
+                  alert.status == SosStatus.pending
+                      ? 'PENDING'
+                      : 'ON MY WAY',
+                  style: GoogleFonts.inter(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
                     color: Colors.white,
+                    letterSpacing: 0.4,
                   ),
                 ),
               ),
             ],
           ),
 
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
 
-          // Lokasi
+          // ── Lokasi warga ────────────────────────────────────────────────
           Row(
             children: [
               Container(
@@ -418,65 +458,98 @@ class _SosAlertCard extends StatelessWidget {
                   color: Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(Icons.location_on, color: Colors.white, size: 18),
+                child: const Icon(Icons.location_on,
+                    color: Colors.white, size: 18),
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: Text(
-                  data.unitLabel,
-                  style: GoogleFonts.inter(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      alert.namaWarga,
+                      style: GoogleFonts.inter(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    Text(
+                      'Blok ${alert.blok} – Unit ${alert.nomorUnit}',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        color: Colors.white.withOpacity(0.85),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
 
-          const SizedBox(height: 8),
-
-          Text(
-            data.description,
-            style: GoogleFonts.inter(
-              fontSize: 13,
-              color: Colors.white.withOpacity(0.9),
-              height: 1.5,
-            ),
-          ),
-
           const SizedBox(height: 16),
 
-          // Tombol ON MY WAY
-          GestureDetector(
-            onTap: onOnMyWay,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 13),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.directions_walk_rounded,
-                      color: Color(0xFFD32F2F), size: 18),
-                  const SizedBox(width: 8),
-                  Text(
-                    'ON MY WAY',
-                    style: GoogleFonts.inter(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFFD32F2F),
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ],
+          // ── Tombol aksi sesuai status ───────────────────────────────────
+          if (onOnMyWay != null)
+            _ActionButton(
+              label: 'ON MY WAY',
+              icon: Icons.directions_walk_rounded,
+              color: _isSos ? const Color(0xFFD32F2F) : const Color(0xFF1565C0),
+              onTap: onOnMyWay!,
+            ),
+
+          if (onResolved != null)
+            _ActionButton(
+              label: 'SELESAI / RESOLVED',
+              icon: Icons.check_circle_outline_rounded,
+              color: const Color(0xFF2E7D32),
+              onTap: onResolved!,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+  final String label;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 13),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: color, size: 18),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: color,
+                letterSpacing: 0.5,
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/router/app_router.dart';
+import '../../../core/services/sos_service.dart';
+import '../sos_status_page.dart';
 import 'bantuan_form_page.dart';
 
 class BantuanCategory {
@@ -55,42 +57,56 @@ class BantuanSatpamPage extends StatelessWidget {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: Text(
-          'Hubungi Pos Keamanan?',
-          style: GoogleFonts.inter(fontWeight: FontWeight.bold),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Panggil Satpam?',
+            style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
         content: Text(
-          'Anda akan langsung terhubung ke pos keamanan pusat.',
+          'Satpam akan menerima notifikasi dan segera merespons.',
           style: GoogleFonts.inter(fontSize: 14),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text(
-              'Batal',
-              style: GoogleFonts.inter(color: AppColors.textGrey),
-            ),
+            child: Text('Batal',
+                style: GoogleFonts.inter(color: AppColors.textGrey)),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              // TODO: url_launcher → tel:nomor_satpam
+              final alert = await SosService.sendCall();
+              if (!context.mounted) return;
+              if (alert != null) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => SosStatusPage(
+                      alertId: alert.id,
+                      type: SosType.call,
+                    ),
+                  ),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Gagal mengirim panggilan. Coba lagi.',
+                        style: GoogleFonts.inter(fontSize: 13)),
+                    backgroundColor: Colors.red.shade700,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                );
+              }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red.shade700,
+              backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
               elevation: 0,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
+                  borderRadius: BorderRadius.circular(10)),
             ),
-            child: Text(
-              'Panggil',
-              style: GoogleFonts.inter(fontWeight: FontWeight.bold),
-            ),
+            child: Text('Panggil',
+                style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
