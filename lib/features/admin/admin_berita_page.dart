@@ -1,72 +1,66 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'dart:convert';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart' show DateFormat;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../core/theme/app_colors.dart';
 import 'widgets/admin_sidebar.dart';
 import 'widgets/admin_top_bar.dart';
+import 'admin_berita_form_page.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Model & mock data
+// Model
 // ─────────────────────────────────────────────────────────────────────────────
 
-enum _BeritaStatus { published, draft }
-
-class _BeritaItem {
-  const _BeritaItem({
+class BeritaDoc {
+  BeritaDoc({
+    required this.id,
     required this.judul,
     required this.kategori,
-    required this.penulis,
-    required this.tanggal,
-    required this.status,
-    required this.thumbnailColor,
-    required this.thumbnailIcon,
+    required this.konten,
+    required this.authorUid,
+    required this.imageUrl,
+    required this.isPublished,
+    required this.publishedAt,
+    required this.viewCount,
   });
+
+  final String id;
   final String judul;
   final String kategori;
-  final String penulis;
-  final String tanggal;
-  final _BeritaStatus status;
-  final Color thumbnailColor;
-  final IconData thumbnailIcon;
-}
+  final String konten;
+  final String authorUid;
+  final String imageUrl;
+  final bool isPublished;
+  final DateTime? publishedAt;
+  final int viewCount;
 
-const _mockBerita = [
-  _BeritaItem(
-    judul: 'Protokol Keamanan Terbaru Untuk Seluruh Warga',
-    kategori: 'KEAMANAN',
-    penulis: 'Budi Santoso',
-    tanggal: '12 Okt 2023',
-    status: _BeritaStatus.published,
-    thumbnailColor: Color(0xFF1E3A8A),
-    thumbnailIcon: Icons.security_outlined,
-  ),
-  _BeritaItem(
-    judul: 'Inisiatif Pengelolaan Sampah Lingkungan Bersama',
-    kategori: 'LINGKUNGAN',
-    penulis: 'Ani Wijaya',
-    tanggal: '10 Okt 2023',
-    status: _BeritaStatus.draft,
-    thumbnailColor: Color(0xFF15803D),
-    thumbnailIcon: Icons.eco_outlined,
-  ),
-  _BeritaItem(
-    judul: 'Renovasi Area Bermain Anak Segera Dimulai',
-    kategori: 'FASILITAS',
-    penulis: 'Dewi Lestari',
-    tanggal: '08 Okt 2023',
-    status: _BeritaStatus.published,
-    thumbnailColor: Color(0xFF0369A1),
-    thumbnailIcon: Icons.sports_soccer_outlined,
-  ),
-  _BeritaItem(
-    judul: 'Rapat Rutin Pengurus Bulan Oktober 2023',
-    kategori: 'AGENDA',
-    penulis: 'Setyo Nugroho',
-    tanggal: '05 Okt 2023',
-    status: _BeritaStatus.published,
-    thumbnailColor: Color(0xFF6B21A8),
-    thumbnailIcon: Icons.event_note_outlined,
-  ),
-];
+  factory BeritaDoc.fromDoc(DocumentSnapshot doc) {
+    final d = doc.data() as Map<String, dynamic>;
+    return BeritaDoc(
+      id          : doc.id,
+      judul       : (d['judul']     as String?) ?? '',
+      kategori    : (d['kategori']  as String?) ?? '',
+      konten      : (d['konten']    as String?) ?? '',
+      authorUid   : (d['authorUid'] as String?) ?? '',
+      imageUrl    : (d['imageUrl']  as String?) ?? '',
+      isPublished : (d['isPublished'] as bool?) ?? false,
+      publishedAt : (d['publishedAt'] as Timestamp?)?.toDate(),
+      viewCount   : (d['viewCount']  as int?)    ?? 0,
+    );
+  }
+
+  String get tanggalFormatted {
+    if (publishedAt == null) return '-';
+    return DateFormat('dd MMM yyyy').format(publishedAt!);
+  }
+
+  String get kategoriLabel =>
+      kategori.isNotEmpty
+          ? '${kategori[0].toUpperCase()}${kategori.substring(1)}'
+          : '-';
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Page
@@ -80,8 +74,11 @@ class AdminBeritaPage extends StatefulWidget {
 }
 
 class _AdminBeritaPageState extends State<AdminBeritaPage> {
+  static const _perPage = 10;
   int _currentPage = 1;
-  final int _totalItems = 128;
+
+  final _col = FirebaseFirestore.instance
+      .collection('beritaacara');
 
   @override
   Widget build(BuildContext context) {
@@ -89,186 +86,232 @@ class _AdminBeritaPageState extends State<AdminBeritaPage> {
       backgroundColor: AppColors.background,
       body: Row(
         children: [
-          // ── Sidebar ────────────────────────────────────────────────────
           const AdminSidebar(activePage: AdminPage.berita),
-
-          // ── Main content ───────────────────────────────────────────────
           Expanded(
             child: Column(
               children: [
-                AdminTopBar(
-                  searchHint: 'Cari berita...',
-                ),
+                AdminTopBar(searchHint: 'Cari berita...'),
                 Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(28, 24, 28, 32),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // ── Page header ──────────────────────────────────
-                        Row(
+                  child: StreamBuilder<QuerySnapshot>(
+                    stream: _col.snapshots(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      if (snapshot.hasError) {
+                        return Center(
+                          child: Text('Error: ${snapshot.error}',
+                              style: GoogleFonts.inter(color: Colors.red)),
+                        );
+                      }
+
+                      final docs = (snapshot.data?.docs ?? [])
+                          .map((d) => BeritaDoc.fromDoc(d))
+                          .toList()
+                        ..sort((a, b) {
+                          if (a.publishedAt == null && b.publishedAt == null) return 0;
+                          if (a.publishedAt == null) return 1;
+                          if (b.publishedAt == null) return -1;
+                          return b.publishedAt!.compareTo(a.publishedAt!);
+                        });
+
+                      final total      = docs.length;
+                      final published  = docs.where((d) => d.isPublished).length;
+                      final draft      = docs.where((d) => !d.isPublished).length;
+                      final totalPages = (total / _perPage).ceil().clamp(1, 9999);
+                      final page       = _currentPage.clamp(1, totalPages);
+                      final start      = (page - 1) * _perPage;
+                      final end        = (start + _perPage).clamp(0, total);
+                      final pageItems  = docs.sublist(start, end);
+
+                      return SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(28, 24, 28, 32),
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
+                            // ── Header ──────────────────────────────────
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Manajemen Berita',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 26,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.textDark,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Kelola dan publikasikan pembaruan komunitas terbaru.',
+                                        style: GoogleFonts.inter(
+                                            fontSize: 13,
+                                            color: AppColors.textGrey),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                ElevatedButton.icon(
+                                  onPressed: () async {
+                                    await showBeritaFormDialog(context);
+                                    setState(() => _currentPage = 1);
+                                  },
+                                  icon: const Icon(Icons.add,
+                                      size: 18, color: Colors.white),
+                                  label: Text(
+                                    'Tambah Berita Baru',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.primary,
+                                    elevation: 0,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 20, vertical: 14),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+
+                            const SizedBox(height: 24),
+
+                            // ── Stat cards ───────────────────────────────
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _StatCard(
+                                    label: 'Total Berita',
+                                    value: '$total',
+                                    icon: Icons.article_outlined,
+                                    iconBg: const Color(0xFFEFF6FF),
+                                    iconColor: const Color(0xFF1D4ED8),
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: _StatCard(
+                                    label: 'Diterbitkan',
+                                    value: '$published',
+                                    icon: Icons.check_circle_outline,
+                                    iconBg: const Color(0xFFF0FDF4),
+                                    iconColor: const Color(0xFF16A34A),
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: _StatCard(
+                                    label: 'Draf',
+                                    value: '$draft',
+                                    icon: Icons.edit_note_outlined,
+                                    iconBg: const Color(0xFFFFF7ED),
+                                    iconColor: const Color(0xFFF97316),
+                                  ),
+                                ),
+                              ],
+                            ),
+
+                            const SizedBox(height: 24),
+
+                            // ── Table ────────────────────────────────────
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                border:
+                                    Border.all(color: Colors.grey.shade200),
+                              ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    'Manajemen Berita',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 26,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppColors.textDark,
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                        20, 18, 20, 0),
+                                    child: Text(
+                                      'DAFTAR BERITA COMMUNITY',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.textGrey,
+                                        letterSpacing: 0.8,
+                                      ),
                                     ),
                                   ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Kelola dan publikasikan pembaruan komunitas terbaru.',
-                                    style: GoogleFonts.inter(
-                                        fontSize: 13,
-                                        color: AppColors.textGrey),
+                                  const SizedBox(height: 12),
+
+                                  // Header row
+                                  Container(
+                                    color: const Color(0xFFF8FAFC),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 20, vertical: 10),
+                                    child: Row(
+                                      children: const [
+                                        Expanded(
+                                            flex: 4,
+                                            child: _ColH('JUDUL BERITA')),
+                                        Expanded(
+                                            flex: 2,
+                                            child: _ColH('KATEGORI')),
+                                        Expanded(
+                                            flex: 2,
+                                            child: _ColH('TANGGAL')),
+                                        Expanded(
+                                            flex: 2,
+                                            child: _ColH('STATUS')),
+                                        SizedBox(
+                                            width: 60,
+                                            child: _ColH('AKSI')),
+                                      ],
+                                    ),
+                                  ),
+
+                                  // Data rows
+                                  if (pageItems.isEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 40),
+                                      child: Center(
+                                        child: Text(
+                                          'Belum ada berita.',
+                                          style: GoogleFonts.inter(
+                                              fontSize: 13,
+                                              color: AppColors.textGrey),
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    ...pageItems.map((item) =>
+                                        _BeritaRow(
+                                          item: item,
+                                          onDeleted: () =>
+                                              setState(() {}),
+                                        )),
+
+                                  // Pagination
+                                  _PaginationBar(
+                                    currentPage: page,
+                                    totalItems: total,
+                                    perPage: _perPage,
+                                    onPageChanged: (p) =>
+                                        setState(() => _currentPage = p),
                                   ),
                                 ],
                               ),
                             ),
-                            // Tambah Berita Baru button
-                            ElevatedButton.icon(
-                              onPressed: () {},
-                              icon: const Icon(Icons.add,
-                                  size: 18, color: Colors.white),
-                              label: Text(
-                                'Tambah Berita Baru',
-                                style: GoogleFonts.inter(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.primary,
-                                elevation: 0,
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 20, vertical: 14),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                              ),
-                            ),
                           ],
                         ),
-
-                        const SizedBox(height: 24),
-
-                        // ── Stat cards ───────────────────────────────────
-                        Row(
-                          children: const [
-                            Expanded(
-                              child: _StatCard(
-                                label: 'Total Berita',
-                                value: '128',
-                                icon: Icons.article_outlined,
-                                iconBg: Color(0xFFEFF6FF),
-                                iconColor: Color(0xFF1D4ED8),
-                              ),
-                            ),
-                            SizedBox(width: 16),
-                            Expanded(
-                              child: _StatCard(
-                                label: 'Diterbitkan',
-                                value: '114',
-                                icon: Icons.check_circle_outline,
-                                iconBg: Color(0xFFF0FDF4),
-                                iconColor: Color(0xFF16A34A),
-                              ),
-                            ),
-                            SizedBox(width: 16),
-                            Expanded(
-                              child: _StatCard(
-                                label: 'Draf',
-                                value: '14',
-                                icon: Icons.edit_note_outlined,
-                                iconBg: Color(0xFFFFF7ED),
-                                iconColor: Color(0xFFF97316),
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 24),
-
-                        // ── Table card ───────────────────────────────────
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.grey.shade200),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Table title
-                              Padding(
-                                padding: const EdgeInsets.fromLTRB(
-                                    20, 18, 20, 0),
-                                child: Text(
-                                  'DAFTAR BERITA COMMUNITY',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.textGrey,
-                                    letterSpacing: 0.8,
-                                  ),
-                                ),
-                              ),
-
-                              const SizedBox(height: 12),
-
-                              // Table header
-                              Container(
-                                color: const Color(0xFFF8FAFC),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 20, vertical: 10),
-                                child: Row(
-                                  children: const [
-                                    Expanded(
-                                        flex: 4,
-                                        child: _ColH('JUDUL BERITA')),
-                                    Expanded(
-                                        flex: 2,
-                                        child: _ColH('KATEGORI')),
-                                    Expanded(
-                                        flex: 2,
-                                        child: _ColH('PENULIS')),
-                                    Expanded(
-                                        flex: 2,
-                                        child: _ColH('TANGGAL')),
-                                    Expanded(
-                                        flex: 2,
-                                        child: _ColH('STATUS')),
-                                    SizedBox(
-                                        width: 60,
-                                        child: _ColH('AKSI')),
-                                  ],
-                                ),
-                              ),
-
-                              // Rows
-                              ..._mockBerita
-                                  .map((item) => _BeritaRow(item: item))
-                                  .toList(),
-
-                              // Pagination
-                              _PaginationBar(
-                                currentPage: _currentPage,
-                                totalItems: _totalItems,
-                                onPageChanged: (p) =>
-                                    setState(() => _currentPage = p),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
                 ),
               ],
@@ -309,7 +352,6 @@ class _StatCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Icon bubble
           Container(
             width: 52,
             height: 52,
@@ -323,24 +365,18 @@ class _StatCard extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                label,
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  color: AppColors.textGrey,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
+              Text(label,
+                  style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: AppColors.textGrey,
+                      fontWeight: FontWeight.w500)),
               const SizedBox(height: 4),
-              Text(
-                value,
-                style: GoogleFonts.inter(
-                  fontSize: 30,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textDark,
-                  height: 1,
-                ),
-              ),
+              Text(value,
+                  style: GoogleFonts.inter(
+                      fontSize: 30,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textDark,
+                      height: 1)),
             ],
           ),
         ],
@@ -359,15 +395,12 @@ class _ColH extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: GoogleFonts.inter(
-        fontSize: 10,
-        fontWeight: FontWeight.w700,
-        color: AppColors.textGrey,
-        letterSpacing: 0.5,
-      ),
-    );
+    return Text(text,
+        style: GoogleFonts.inter(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textGrey,
+            letterSpacing: 0.5));
   }
 }
 
@@ -376,8 +409,9 @@ class _ColH extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _BeritaRow extends StatefulWidget {
-  const _BeritaRow({required this.item});
-  final _BeritaItem item;
+  const _BeritaRow({required this.item, required this.onDeleted});
+  final BeritaDoc item;
+  final VoidCallback onDeleted;
 
   @override
   State<_BeritaRow> createState() => _BeritaRowState();
@@ -387,24 +421,63 @@ class _BeritaRowState extends State<_BeritaRow> {
   bool _hovered = false;
 
   Color _kategoriColor(String k) {
-    switch (k) {
-      case 'KEAMANAN':
-        return const Color(0xFF1D4ED8);
-      case 'LINGKUNGAN':
-        return const Color(0xFFD97706);
-      default:
-        return const Color(0xFF64748B);
+    switch (k.toLowerCase()) {
+      case 'keamanan':   return const Color(0xFF1D4ED8);
+      case 'lingkungan': return const Color(0xFF15803D);
+      case 'fasilitas':  return const Color(0xFF0369A1);
+      case 'agenda':     return const Color(0xFF6B21A8);
+      default:           return const Color(0xFF64748B);
     }
   }
 
   Color _kategoriBg(String k) {
-    switch (k) {
-      case 'KEAMANAN':
-        return const Color(0xFFEFF6FF);
-      case 'LINGKUNGAN':
-        return const Color(0xFFFFFBEB);
-      default:
-        return const Color(0xFFF1F5F9);
+    switch (k.toLowerCase()) {
+      case 'keamanan':   return const Color(0xFFEFF6FF);
+      case 'lingkungan': return const Color(0xFFF0FDF4);
+      case 'fasilitas':  return const Color(0xFFE0F2FE);
+      case 'agenda':     return const Color(0xFFF5F3FF);
+      default:           return const Color(0xFFF1F5F9);
+    }
+  }
+
+  Future<void> _delete() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Text('Hapus Berita?',
+            style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.bold)),
+        content: Text(
+          'Apakah Anda yakin ingin menghapus "${widget.item.judul}"?',
+          style: GoogleFonts.inter(fontSize: 13, color: AppColors.textGrey),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Batal',
+                style: GoogleFonts.inter(color: AppColors.textGrey)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade500,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+            ),
+            child:
+                Text('Hapus', style: GoogleFonts.inter(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await FirebaseFirestore.instance
+          .collection('beritaacara')
+          .doc(widget.item.id)
+          .delete();
+      widget.onDeleted();
     }
   }
 
@@ -414,7 +487,7 @@ class _BeritaRowState extends State<_BeritaRow> {
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
+      onExit:  (_) => setState(() => _hovered = false),
       child: Container(
         decoration: BoxDecoration(
           color: _hovered
@@ -422,8 +495,7 @@ class _BeritaRowState extends State<_BeritaRow> {
               : Colors.white,
           border: Border(top: BorderSide(color: Colors.grey.shade100)),
         ),
-        padding:
-            const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         child: Row(
           children: [
             // Judul + thumbnail
@@ -431,30 +503,19 @@ class _BeritaRowState extends State<_BeritaRow> {
               flex: 4,
               child: Row(
                 children: [
-                  // Thumbnail
                   ClipRRect(
                     borderRadius: BorderRadius.circular(6),
-                    child: Container(
-                      width: 46,
-                      height: 36,
-                      color: item.thumbnailColor,
-                      child: Icon(
-                        item.thumbnailIcon,
-                        size: 20,
-                        color: Colors.white.withOpacity(0.85),
-                      ),
-                    ),
+                    child: _buildThumbnail(item),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
                       item.judul,
                       style: GoogleFonts.inter(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.textDark,
-                        height: 1.4,
-                      ),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.textDark,
+                          height: 1.4),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -466,50 +527,38 @@ class _BeritaRowState extends State<_BeritaRow> {
             // Kategori badge
             Expanded(
               flex: 2,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _kategoriBg(item.kategori),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  item.kategori,
-                  style: GoogleFonts.inter(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: _kategoriColor(item.kategori),
-                    letterSpacing: 0.3,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _kategoriBg(item.kategori),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    item.kategoriLabel.toUpperCase(),
+                    style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: _kategoriColor(item.kategori),
+                        letterSpacing: 0.3),
                   ),
                 ),
-              ),
-            ),
-
-            // Penulis
-            Expanded(
-              flex: 2,
-              child: Text(
-                item.penulis,
-                style: GoogleFonts.inter(
-                    fontSize: 13, color: AppColors.textDark),
               ),
             ),
 
             // Tanggal
             Expanded(
               flex: 2,
-              child: Text(
-                item.tanggal,
-                style: GoogleFonts.inter(
-                    fontSize: 12, color: AppColors.textGrey),
-              ),
+              child: Text(item.tanggalFormatted,
+                  style: GoogleFonts.inter(
+                      fontSize: 12, color: AppColors.textGrey)),
             ),
 
             // Status
-            Expanded(
-              flex: 2,
-              child: _StatusBadge(item.status),
-            ),
+            Expanded(flex: 2, child: _StatusBadge(item.isPublished)),
 
             // Aksi
             SizedBox(
@@ -519,13 +568,16 @@ class _BeritaRowState extends State<_BeritaRow> {
                   _AksiBtn(
                     icon: Icons.edit_outlined,
                     color: AppColors.primary,
-                    onTap: () {},
+                    onTap: () => showBeritaFormDialog(
+                      context,
+                      editDoc: widget.item,
+                    ),
                   ),
                   const SizedBox(width: 6),
                   _AksiBtn(
                     icon: Icons.delete_outline,
                     color: Colors.red.shade400,
-                    onTap: () => _showDeleteDialog(context, item.judul),
+                    onTap: _delete,
                   ),
                 ],
               ),
@@ -536,52 +588,53 @@ class _BeritaRowState extends State<_BeritaRow> {
     );
   }
 
-  void _showDeleteDialog(BuildContext context, String judul) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: Text(
-          'Hapus Berita?',
-          style: GoogleFonts.inter(
-              fontSize: 16, fontWeight: FontWeight.bold),
-        ),
-        content: Text(
-          'Apakah Anda yakin ingin menghapus "$judul"?',
-          style:
-              GoogleFonts.inter(fontSize: 13, color: AppColors.textGrey),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Batal',
-                style: GoogleFonts.inter(color: AppColors.textGrey)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red.shade500,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8)),
-            ),
-            child: Text('Hapus',
-                style: GoogleFonts.inter(color: Colors.white)),
-          ),
-        ],
-      ),
+  Widget _buildThumbnail(BeritaDoc item) {
+    if (item.imageUrl.isEmpty) return _thumbPlaceholder(item.kategori);
+
+    // Base64 data URL — simpan langsung di Firestore
+    if (item.imageUrl.startsWith('data:')) {
+      try {
+        final base64Str = item.imageUrl.split(',').last;
+        final bytes = base64Decode(base64Str);
+        return Image.memory(bytes,
+            width: 46, height: 36, fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => _thumbPlaceholder(item.kategori));
+      } catch (_) {
+        return _thumbPlaceholder(item.kategori);
+      }
+    }
+
+    // URL biasa (http/https)
+    return Image.network(
+      item.imageUrl,
+      width: 46,
+      height: 36,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => _thumbPlaceholder(item.kategori),
+    );
+  }
+
+  Widget _thumbPlaceholder(String kategori) {
+    return Container(
+      width: 46,
+      height: 36,
+      color: _kategoriColor(kategori).withOpacity(0.15),
+      child: Icon(Icons.article_outlined,
+          size: 18, color: _kategoriColor(kategori)),
     );
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Status badge
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _StatusBadge extends StatelessWidget {
-  const _StatusBadge(this.status);
-  final _BeritaStatus status;
+  const _StatusBadge(this.isPublished);
+  final bool isPublished;
 
   @override
   Widget build(BuildContext context) {
-    final isPublished = status == _BeritaStatus.published;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -611,6 +664,10 @@ class _StatusBadge extends StatelessWidget {
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Aksi button
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _AksiBtn extends StatelessWidget {
   const _AksiBtn({
@@ -648,68 +705,46 @@ class _PaginationBar extends StatelessWidget {
   const _PaginationBar({
     required this.currentPage,
     required this.totalItems,
+    required this.perPage,
     required this.onPageChanged,
   });
   final int currentPage;
   final int totalItems;
+  final int perPage;
   final ValueChanged<int> onPageChanged;
 
   @override
   Widget build(BuildContext context) {
-    final totalPages = (totalItems / 4).ceil(); // 4 items per page (mock)
-    final start = (currentPage - 1) * 4 + 1;
-    final end = (currentPage * 4).clamp(0, totalItems);
+    final totalPages = (totalItems / perPage).ceil().clamp(1, 9999);
+    final start      = (currentPage - 1) * perPage + 1;
+    final end        = (currentPage * perPage).clamp(0, totalItems);
 
     return Container(
       decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: Colors.grey.shade100)),
-      ),
-      padding:
-          const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          border: Border(top: BorderSide(color: Colors.grey.shade100))),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       child: Row(
         children: [
           Text(
-            'Menampilkan $start-$end dari $totalItems berita',
+            totalItems == 0
+                ? 'Tidak ada berita'
+                : 'Menampilkan $start–$end dari $totalItems berita',
             style: GoogleFonts.inter(
                 fontSize: 12, color: AppColors.textGrey),
           ),
           const Spacer(),
-          _PBtn(
-            label: '<',
+          _PageBtn(
+            icon: Icons.chevron_left,
             enabled: currentPage > 1,
             onTap: () => onPageChanged(currentPage - 1),
           ),
-          const SizedBox(width: 4),
-          _PBtn(
-              label: '1',
-              isActive: currentPage == 1,
-              onTap: () => onPageChanged(1)),
-          const SizedBox(width: 4),
-          _PBtn(
-              label: '2',
-              isActive: currentPage == 2,
-              onTap: () => onPageChanged(2)),
-          const SizedBox(width: 4),
-          _PBtn(
-              label: '3',
-              isActive: currentPage == 3,
-              onTap: () => onPageChanged(3)),
-          const SizedBox(width: 4),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Text('...',
-                style: GoogleFonts.inter(
-                    fontSize: 13, color: AppColors.textGrey)),
-          ),
-          const SizedBox(width: 4),
-          _PBtn(
-            label: '$totalPages',
-            isActive: currentPage == totalPages,
-            onTap: () => onPageChanged(totalPages),
-          ),
-          const SizedBox(width: 4),
-          _PBtn(
-            label: '>',
+          const SizedBox(width: 8),
+          Text('$currentPage / $totalPages',
+              style: GoogleFonts.inter(
+                  fontSize: 12, color: AppColors.textDark)),
+          const SizedBox(width: 8),
+          _PageBtn(
+            icon: Icons.chevron_right,
             enabled: currentPage < totalPages,
             onTap: () => onPageChanged(currentPage + 1),
           ),
@@ -719,50 +754,33 @@ class _PaginationBar extends StatelessWidget {
   }
 }
 
-class _PBtn extends StatelessWidget {
-  const _PBtn({
-    required this.label,
-    this.isActive = false,
-    this.enabled = true,
-    required this.onTap,
-  });
-  final String label;
-  final bool isActive;
+class _PageBtn extends StatelessWidget {
+  const _PageBtn(
+      {required this.icon, required this.enabled, required this.onTap});
+  final IconData icon;
   final bool enabled;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return InkWell(
       onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.circular(6),
       child: Container(
-        width: 34,
-        height: 34,
+        width: 30,
+        height: 30,
         decoration: BoxDecoration(
-          color: isActive ? AppColors.primary : Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isActive
-                ? AppColors.primary
-                : enabled
-                    ? Colors.grey.shade300
-                    : Colors.grey.shade200,
-          ),
+          color: enabled
+              ? Colors.white
+              : Colors.grey.shade100,
+          border: Border.all(color: Colors.grey.shade200),
+          borderRadius: BorderRadius.circular(6),
         ),
-        child: Center(
-          child: Text(
-            label,
-            style: GoogleFonts.inter(
-              fontSize: 12,
-              fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-              color: isActive
-                  ? Colors.white
-                  : enabled
-                      ? const Color(0xFF374151)
-                      : Colors.grey.shade400,
-            ),
-          ),
-        ),
+        child: Icon(icon,
+            size: 18,
+            color: enabled
+                ? AppColors.textDark
+                : Colors.grey.shade400),
       ),
     );
   }

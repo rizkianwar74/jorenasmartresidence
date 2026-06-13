@@ -36,9 +36,23 @@ class WargaListItem extends StatelessWidget {
             // Avatar
             CircleAvatar(
               radius: 28,
-              backgroundColor: Colors.grey.shade200,
-              backgroundImage: NetworkImage(warga.imageUrl),
+              backgroundColor: AppColors.primary.withOpacity(0.15),
+              backgroundImage: warga.imageUrl != null
+                  ? NetworkImage(warga.imageUrl!)
+                  : null,
               onBackgroundImageError: (_, __) {},
+              child: warga.imageUrl == null
+                  ? Text(
+                      warga.name.isNotEmpty
+                          ? warga.name[0].toUpperCase()
+                          : '?',
+                      style: TextStyle(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
+                    )
+                  : null,
             ),
             const SizedBox(width: 14),
 

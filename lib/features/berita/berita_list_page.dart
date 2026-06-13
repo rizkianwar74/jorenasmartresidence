@@ -1,8 +1,11 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/data/berita_data.dart';
 import '../../core/utils/responsive_helper.dart';
+import '../admin/admin_berita_page.dart' show BeritaDoc;
 import 'berita_detail_page.dart';
 
 class BeritaListPage extends StatefulWidget {
@@ -14,37 +17,75 @@ class BeritaListPage extends StatefulWidget {
 
 class _BeritaListPageState extends State<BeritaListPage> {
   String _searchQuery = '';
-  KategoriBerita? _selectedKategori; // null = Semua
+  String? _selectedKategori; // null = Semua
 
-  static const _filterOptions = <String, KategoriBerita?>{
-    'Semua'       : null,
-    'Fasilitas'   : KategoriBerita.fasilitas,
-    'Keamanan'    : KategoriBerita.keamanan,
-    'Kegiatan'    : KategoriBerita.kegiatan,
-    'Pengumuman'  : KategoriBerita.pengumuman,
-    'Kehilangan'  : KategoriBerita.kehilangan,
-  };
+  static const _filterOptions = [
+    'Semua',
+    'Fasilitas',
+    'Keamanan',
+    'Kegiatan',
+    'Pengumuman',
+    'Kehilangan',
+    'Lainnya',
+  ];
 
-  List<BeritaModel> get _filteredList {
-    return dummyBeritaList.where((b) {
-      final matchKategori =
-          _selectedKategori == null || b.kategori == _selectedKategori;
+  List<BeritaDoc> _beritaAll = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBerita();
+  }
+
+  Future<void> _loadBerita() async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('beritaacara')
+          .get();
+
+      final all = snap.docs.map(BeritaDoc.fromDoc).toList();
+      final published = all.where((b) => b.isPublished).toList()
+        ..sort((a, b) {
+          if (a.publishedAt == null && b.publishedAt == null) return 0;
+          if (a.publishedAt == null) return 1;
+          if (b.publishedAt == null) return -1;
+          return b.publishedAt!.compareTo(a.publishedAt!);
+        });
+
+      if (mounted) {
+        setState(() {
+          _beritaAll = published;
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  List<BeritaDoc> get _filtered {
+    return _beritaAll.where((b) {
+      final matchKategori = _selectedKategori == null ||
+          _selectedKategori == 'Semua' ||
+          b.kategori.toLowerCase() == _selectedKategori!.toLowerCase();
       final matchSearch = _searchQuery.isEmpty ||
           b.judul.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          b.ringkasan.toLowerCase().contains(_searchQuery.toLowerCase());
+          b.konten.toLowerCase().contains(_searchQuery.toLowerCase());
       return matchKategori && matchSearch;
     }).toList();
   }
 
-  String _estimasiBaca(BeritaModel b) {
-    final minutes = (b.isi.split(' ').length / 200).ceil();
+  String _estimasiBaca(BeritaDoc b) {
+    final minutes = (b.konten.split(' ').length / 200).ceil();
     return '$minutes MENIT BACA';
   }
 
   @override
   Widget build(BuildContext context) {
     final hPad = Responsive.value<double>(context, mobile: 20, tablet: 32);
-    final isTablet = Responsive.isTablet(context) || Responsive.isDesktop(context);
+    final isTablet =
+        Responsive.isTablet(context) || Responsive.isDesktop(context);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7F8),
@@ -74,36 +115,32 @@ class _BeritaListPageState extends State<BeritaListPage> {
             children: [
               Padding(
                 padding: EdgeInsets.fromLTRB(hPad, 12, hPad, 0),
-                child: Column(
-                  children: [
-                    // ── Search bar ───────────────────────────────────
-                    Container(
-                      height: 46,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.shade200),
-                      ),
-                      child: TextField(
-                        onChanged: (v) => setState(() => _searchQuery = v),
-                        style: GoogleFonts.inter(
-                            fontSize: 14, color: AppColors.textDark),
-                        decoration: InputDecoration(
-                          hintText: 'Cari berita atau pengumuman...',
-                          hintStyle: GoogleFonts.inter(
-                              fontSize: 14, color: AppColors.textGrey),
-                          prefixIcon: const Icon(Icons.search,
-                              color: AppColors.textGrey, size: 20),
-                          border: InputBorder.none,
-                          contentPadding:
-                              const EdgeInsets.symmetric(vertical: 13),
-                        ),
-                      ),
+                child: Container(
+                  height: 46,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: TextField(
+                    onChanged: (v) => setState(() => _searchQuery = v),
+                    style: GoogleFonts.inter(
+                        fontSize: 14, color: AppColors.textDark),
+                    decoration: InputDecoration(
+                      hintText: 'Cari berita atau pengumuman...',
+                      hintStyle: GoogleFonts.inter(
+                          fontSize: 14, color: AppColors.textGrey),
+                      prefixIcon: const Icon(Icons.search,
+                          color: AppColors.textGrey, size: 20),
+                      border: InputBorder.none,
+                      contentPadding:
+                          const EdgeInsets.symmetric(vertical: 13),
                     ),
-                    const SizedBox(height: 12),
-                  ],
+                  ),
                 ),
               ),
+
+              const SizedBox(height: 12),
 
               // ── Filter chips ─────────────────────────────────────────
               SizedBox(
@@ -112,17 +149,22 @@ class _BeritaListPageState extends State<BeritaListPage> {
                   scrollDirection: Axis.horizontal,
                   padding: EdgeInsets.symmetric(horizontal: hPad),
                   physics: const BouncingScrollPhysics(),
-                  children: _filterOptions.entries.map((entry) {
-                    final isActive = _selectedKategori == entry.value;
+                  children: _filterOptions.map((opt) {
+                    final isActive = opt == 'Semua'
+                        ? (_selectedKategori == null ||
+                            _selectedKategori == 'Semua')
+                        : _selectedKategori == opt;
                     return GestureDetector(
-                      onTap: () =>
-                          setState(() => _selectedKategori = entry.value),
+                      onTap: () => setState(() =>
+                          _selectedKategori = opt == 'Semua' ? null : opt),
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 150),
                         margin: const EdgeInsets.only(right: 8),
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 16),
                         decoration: BoxDecoration(
-                          color: isActive ? AppColors.primary : Colors.white,
+                          color:
+                              isActive ? AppColors.primary : Colors.white,
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
                             color: isActive
@@ -132,7 +174,7 @@ class _BeritaListPageState extends State<BeritaListPage> {
                         ),
                         alignment: Alignment.center,
                         child: Text(
-                          entry.key,
+                          opt,
                           style: GoogleFonts.inter(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
@@ -149,67 +191,61 @@ class _BeritaListPageState extends State<BeritaListPage> {
 
               const SizedBox(height: 16),
 
-              // ── List berita ─────────────────────────────────────────
+              // ── Konten ───────────────────────────────────────────────
               Expanded(
-                child: _filteredList.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.article_outlined,
-                                size: 48, color: Colors.grey.shade300),
-                            const SizedBox(height: 12),
-                            Text(
-                              'Tidak ada berita ditemukan',
-                              style: GoogleFonts.inter(
-                                  fontSize: 14, color: AppColors.textGrey),
-                            ),
-                          ],
-                        ),
-                      )
-                    : isTablet
-                        // Grid 2 kolom di tablet
-                        ? GridView.builder(
-                            padding: EdgeInsets.fromLTRB(hPad, 0, hPad, 32),
-                            gridDelegate:
-                                const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              crossAxisSpacing: 16,
-                              mainAxisSpacing: 16,
-                              childAspectRatio: 0.75,
-                            ),
-                            itemCount: _filteredList.length,
-                            itemBuilder: (_, i) => _BeritaCard(
-                              berita: _filteredList[i],
-                              estimasi: _estimasiBaca(_filteredList[i]),
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => BeritaDetailPage(
-                                      berita: _filteredList[i]),
+                child: _isLoading
+                    ? const Center(
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : _filtered.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.article_outlined,
+                                    size: 48,
+                                    color: Colors.grey.shade300),
+                                const SizedBox(height: 12),
+                                Text(
+                                  'Tidak ada berita ditemukan',
+                                  style: GoogleFonts.inter(
+                                      fontSize: 14,
+                                      color: AppColors.textGrey),
                                 ),
-                              ),
+                              ],
                             ),
                           )
-                        // List vertikal di mobile
-                        : ListView.separated(
-                            padding:
-                                EdgeInsets.fromLTRB(hPad, 0, hPad, 32),
-                            itemCount: _filteredList.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: 16),
-                            itemBuilder: (_, i) => _BeritaCard(
-                              berita: _filteredList[i],
-                              estimasi: _estimasiBaca(_filteredList[i]),
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => BeritaDetailPage(
-                                      berita: _filteredList[i]),
+                        : isTablet
+                            ? GridView.builder(
+                                padding: EdgeInsets.fromLTRB(
+                                    hPad, 0, hPad, 32),
+                                gridDelegate:
+                                    const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 2,
+                                  crossAxisSpacing: 16,
+                                  mainAxisSpacing: 16,
+                                  childAspectRatio: 0.75,
+                                ),
+                                itemCount: _filtered.length,
+                                itemBuilder: (_, i) => _BeritaCard(
+                                  berita: _filtered[i],
+                                  estimasi: _estimasiBaca(_filtered[i]),
+                                  onTap: () => _openDetail(
+                                      context, _filtered[i]),
+                                ),
+                              )
+                            : ListView.separated(
+                                padding: EdgeInsets.fromLTRB(
+                                    hPad, 0, hPad, 32),
+                                itemCount: _filtered.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(height: 16),
+                                itemBuilder: (_, i) => _BeritaCard(
+                                  berita: _filtered[i],
+                                  estimasi: _estimasiBaca(_filtered[i]),
+                                  onTap: () => _openDetail(
+                                      context, _filtered[i]),
                                 ),
                               ),
-                            ),
-                          ),
               ),
             ],
           ),
@@ -217,9 +253,18 @@ class _BeritaListPageState extends State<BeritaListPage> {
       ),
     );
   }
+
+  void _openDetail(BuildContext context, BeritaDoc berita) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+          builder: (_) => BeritaDetailPage(berita: berita)),
+    );
+  }
 }
 
 // ── Kartu berita ──────────────────────────────────────────────────────────────
+
 class _BeritaCard extends StatelessWidget {
   const _BeritaCard({
     required this.berita,
@@ -227,7 +272,7 @@ class _BeritaCard extends StatelessWidget {
     this.onTap,
   });
 
-  final BeritaModel berita;
+  final BeritaDoc berita;
   final String estimasi;
   final VoidCallback? onTap;
 
@@ -254,62 +299,43 @@ class _BeritaCard extends StatelessWidget {
             ClipRRect(
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(16)),
-              child: Stack(
-                children: [
-                  AspectRatio(
-                    aspectRatio: 16 / 9,
-                    child: Image.network(
-                      berita.imageUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
-                        color: Colors.grey.shade200,
-                        child: const Icon(Icons.broken_image_outlined,
-                            color: Colors.grey, size: 32),
-                      ),
-                      loadingBuilder: (_, child, progress) {
-                        if (progress == null) return child;
-                        return Container(
-                          color: Colors.grey.shade100,
-                          child: const Center(
-                            child: CircularProgressIndicator(strokeWidth: 2),
+              child: AspectRatio(
+                aspectRatio: 16 / 9,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    _CardImage(imageUrl: berita.imageUrl),
+                    Positioned(
+                      top: 12,
+                      left: 12,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          berita.kategori.toUpperCase(),
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            letterSpacing: 0.6,
                           ),
-                        );
-                      },
-                    ),
-                  ),
-                  // Badge kategori
-                  Positioned(
-                    top: 12,
-                    left: 12,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        berita.kategoriLabel.toUpperCase(),
-                        style: GoogleFonts.inter(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                          letterSpacing: 0.6,
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
 
-            // Konten teks
             Padding(
               padding: const EdgeInsets.all(14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Judul
                   Text(
                     berita.judul,
                     maxLines: 2,
@@ -322,9 +348,10 @@ class _BeritaCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  // Ringkasan
                   Text(
-                    berita.ringkasan,
+                    berita.konten.length > 100
+                        ? '${berita.konten.substring(0, 100)}...'
+                        : berita.konten,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.inter(
@@ -334,14 +361,13 @@ class _BeritaCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  // Tanggal + estimasi baca
                   Row(
                     children: [
                       Icon(Icons.calendar_today_outlined,
                           size: 12, color: AppColors.textGrey),
                       const SizedBox(width: 4),
                       Text(
-                        berita.tanggal,
+                        berita.tanggalFormatted,
                         style: GoogleFonts.inter(
                             fontSize: 12, color: AppColors.textGrey),
                       ),
@@ -362,6 +388,57 @@ class _BeritaCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ── Gambar kartu: handle base64 & network URL ─────────────────────────────────
+
+class _CardImage extends StatelessWidget {
+  const _CardImage({required this.imageUrl});
+  final String imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    if (imageUrl.isEmpty) {
+      return Container(
+        color: Colors.grey.shade200,
+        child: const Center(
+          child: Icon(Icons.image_outlined, color: Colors.grey, size: 32),
+        ),
+      );
+    }
+
+    if (imageUrl.startsWith('data:')) {
+      try {
+        final bytes = base64Decode(imageUrl.split(',').last);
+        return Image.memory(bytes,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Container(
+                color: Colors.grey.shade200,
+                child: const Icon(Icons.broken_image_outlined,
+                    color: Colors.grey, size: 32)));
+      } catch (_) {
+        return Container(color: Colors.grey.shade200);
+      }
+    }
+
+    return Image.network(
+      imageUrl,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => Container(
+        color: Colors.grey.shade200,
+        child: const Icon(Icons.broken_image_outlined,
+            color: Colors.grey, size: 32),
+      ),
+      loadingBuilder: (_, child, progress) {
+        if (progress == null) return child;
+        return Container(
+          color: Colors.grey.shade100,
+          child:
+              const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+        );
+      },
     );
   }
 }

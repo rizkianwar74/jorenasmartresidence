@@ -1,8 +1,25 @@
+import 'dart:typed_data';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/router/app_router.dart';
+import '../../features/auth/auth_repository.dart';
+import '../../shared/widgets/satpam_bottom_nav.dart';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// State enum
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum _PatroliState { loading, idle, active }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Page
+// ─────────────────────────────────────────────────────────────────────────────
 
 class SatpamPatroliPage extends StatefulWidget {
   const SatpamPatroliPage({super.key});
@@ -13,12 +30,7 @@ class SatpamPatroliPage extends StatefulWidget {
 
 class _SatpamPatroliPageState extends State<SatpamPatroliPage> {
   static const double _contentMaxWidth = 600.0;
-
-  TimeOfDay _jamMulai  = const TimeOfDay(hour: 8,  minute: 0);
-  TimeOfDay _jamSelesai = const TimeOfDay(hour: 9, minute: 0);
-
-  final _keteranganController = TextEditingController();
-  final Set<String> _selectedTags = {};
+  static const int _maxFotos = 4;
 
   static const _quickTags = [
     'Aman & Terkendali',
@@ -26,52 +38,227 @@ class _SatpamPatroliPageState extends State<SatpamPatroliPage> {
     'Insiden Terdeteksi',
   ];
 
+  // ── State ──────────────────────────────────────────────────────────────────
+  _PatroliState _state = _PatroliState.loading;
+
+  // Data patroli aktif
+  String? _activeDocId;
+  String  _activeJamMulai = '';
+  String  _activeBlok     = '';
+
+  // Form: mulai patroli
+  final _blokMulaiController = TextEditingController();
+
+  // Form: selesai patroli
+  final _keteranganController = TextEditingController();
+  final Set<String>   _selectedTags = {};
+  final List<Uint8List> _fotos      = [];
+  final _picker = ImagePicker();
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkActivePatroli();
+  }
+
   @override
   void dispose() {
+    _blokMulaiController.dispose();
     _keteranganController.dispose();
     super.dispose();
   }
 
-  String _formatTime(TimeOfDay t) {
-    final hour   = t.hourOfPeriod == 0 ? 12 : t.hourOfPeriod;
-    final minute = t.minute.toString().padLeft(2, '0');
-    final period = t.period == DayPeriod.am ? 'AM' : 'PM';
-    return '$hour:$minute $period';
+  // ── Cek apakah satpam ini punya patroli AKTIF ─────────────────────────────
+  Future<void> _checkActivePatroli() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('patroli')
+          .where('satpamUid', isEqualTo: uid)
+          .where('status', isEqualTo: 'AKTIF')
+          .limit(1)
+          .get();
+
+      if (!mounted) return;
+
+      if (snap.docs.isEmpty) {
+        setState(() => _state = _PatroliState.idle);
+      } else {
+        final doc = snap.docs.first;
+        final d   = doc.data() as Map<String, dynamic>;
+        setState(() {
+          _state          = _PatroliState.active;
+          _activeDocId    = doc.id;
+          _activeJamMulai = d['jamMulai']   as String? ?? '';
+          _activeBlok     = d['blokPatroli'] as String? ?? '';
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _state = _PatroliState.idle);
+    }
   }
 
-  Future<void> _pickTime({required bool isMulai}) async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: isMulai ? _jamMulai : _jamSelesai,
-      builder: (context, child) => Theme(
-        data: Theme.of(context).copyWith(
-          colorScheme: ColorScheme.light(primary: AppColors.primary),
-        ),
-        child: child!,
-      ),
-    );
-    if (picked == null) return;
-    setState(() {
-      if (isMulai) _jamMulai = picked;
-      else _jamSelesai = picked;
-    });
+  // ── Jam sekarang sebagai string HH:mm ─────────────────────────────────────
+  String _nowHHmm() {
+    final now = DateTime.now();
+    return '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
   }
 
-  void _simpanLaporan() {
+  // ── MULAI PATROLI — buat dokumen AKTIF ────────────────────────────────────
+  Future<void> _mulaiPatroli() async {
+    final blok = _blokMulaiController.text.trim();
+    if (blok.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(_snackBar(
+        'Isi blok / area patroli terlebih dahulu.', isError: true));
+      return;
+    }
+
+    setState(() => _saving = true);
     HapticFeedback.mediumImpact();
-    // TODO: simpan ke Firestore
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Laporan patroli berhasil disimpan',
-          style: GoogleFonts.inter(fontSize: 13),
-        ),
-        backgroundColor: const Color(0xFF2E7D32),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
+
+    try {
+      final user      = FirebaseAuth.instance.currentUser;
+      final appUser   = AuthRepository.currentUser;
+      final satpamUid = user?.uid ?? '';
+      final namaSatpam = appUser?.namaLengkap.isNotEmpty == true
+          ? appUser!.namaLengkap
+          : (user?.displayName ?? 'Satpam');
+      final jamMulai = _nowHHmm();
+
+      final docRef = await FirebaseFirestore.instance.collection('patroli').add({
+        'satpamUid'   : satpamUid,
+        'namaSatpam'  : namaSatpam,
+        'blokPatroli' : blok,
+        'jamMulai'    : jamMulai,
+        'jamSelesai'  : '',
+        'keterangan'  : '',
+        'quickTags'   : <String>[],
+        'fotoUrls'    : <String>[],
+        'status'      : 'AKTIF',
+        'createdAt'   : FieldValue.serverTimestamp(),
+        'updatedAt'   : FieldValue.serverTimestamp(),
+      });
+
+      if (!mounted) return;
+      setState(() {
+        _state          = _PatroliState.active;
+        _activeDocId    = docRef.id;
+        _activeJamMulai = jamMulai;
+        _activeBlok     = blok;
+        _saving         = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+          _snackBar('Patroli dimulai pukul $jamMulai. Tetap waspada!'));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+          _snackBar('Gagal memulai patroli: $e', isError: true));
+    }
   }
+
+  // ── SELESAI PATROLI — update dokumen ke SELESAI ───────────────────────────
+  Future<void> _selesaiPatroli() async {
+    if (_activeDocId == null) return;
+
+    setState(() => _saving = true);
+    HapticFeedback.mediumImpact();
+
+    try {
+      final jamSelesai = _nowHHmm();
+      final satpamUid  = FirebaseAuth.instance.currentUser?.uid ?? '';
+
+      // Upload foto jika ada
+      List<String> fotoUrls = [];
+      if (_fotos.isNotEmpty) {
+        fotoUrls = await _uploadFotos(satpamUid, _activeDocId!);
+      }
+
+      await FirebaseFirestore.instance
+          .collection('patroli')
+          .doc(_activeDocId)
+          .update({
+        'status'     : 'SELESAI',
+        'jamSelesai' : jamSelesai,
+        'keterangan' : _keteranganController.text.trim(),
+        'quickTags'  : _selectedTags.toList(),
+        if (fotoUrls.isNotEmpty) 'fotoUrls': fotoUrls,
+        'updatedAt'  : FieldValue.serverTimestamp(),
+      });
+
+      if (!mounted) return;
+
+      // Reset semua state
+      _keteranganController.clear();
+      _blokMulaiController.clear();
+      setState(() {
+        _state          = _PatroliState.idle;
+        _activeDocId    = null;
+        _activeJamMulai = '';
+        _activeBlok     = '';
+        _selectedTags.clear();
+        _fotos.clear();
+        _saving         = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+          _snackBar('Patroli selesai pukul $jamSelesai. Laporan tersimpan.'));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+          _snackBar('Gagal menyimpan laporan: $e', isError: true));
+    }
+  }
+
+  // ── Upload foto ke Storage ─────────────────────────────────────────────────
+  Future<List<String>> _uploadFotos(String uid, String docId) async {
+    final urls = <String>[];
+    for (int i = 0; i < _fotos.length; i++) {
+      try {
+        final ref = FirebaseStorage.instance
+            .ref()
+            .child('patroli/$uid/$docId/foto_$i.jpg');
+        final task = await ref.putData(
+            _fotos[i], SettableMetadata(contentType: 'image/jpeg'));
+        urls.add(await task.ref.getDownloadURL());
+      } catch (_) {}
+    }
+    return urls;
+  }
+
+  // ── Pilih foto dari galeri ─────────────────────────────────────────────────
+  Future<void> _pickFoto() async {
+    if (_fotos.length >= _maxFotos) return;
+    final img = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 70,
+      maxWidth: 1024,
+      maxHeight: 1024,
+    );
+    if (img == null) return;
+    final bytes = await img.readAsBytes();
+    setState(() => _fotos.add(bytes));
+  }
+
+  void _removeFoto(int i) => setState(() => _fotos.removeAt(i));
+
+  // ── Helper snackbar ────────────────────────────────────────────────────────
+  SnackBar _snackBar(String msg, {bool isError = false}) => SnackBar(
+        content: Text(msg, style: GoogleFonts.inter(fontSize: 13)),
+        backgroundColor:
+            isError ? Colors.red.shade600 : const Color(0xFF2E7D32),
+        behavior: SnackBarBehavior.floating,
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.all(16),
+      );
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // BUILD
+  // ─────────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -86,387 +273,422 @@ class _SatpamPatroliPageState extends State<SatpamPatroliPage> {
           children: [
             Center(
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: _contentMaxWidth),
+                constraints:
+                    const BoxConstraints(maxWidth: _contentMaxWidth),
                 child: Column(
                   children: [
-                    // ── Top Bar ────────────────────────────────────────
                     _TopBar(),
-
-                    // ── Scrollable content ─────────────────────────────
                     Expanded(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.fromLTRB(20, 4, 20, 140),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Judul
-                            Text(
-                              'Input Detail Patroli',
-                              style: GoogleFonts.inter(
-                                fontSize: 26,
-                                fontWeight: FontWeight.bold,
-                                color: const Color(0xFF0D1B2A),
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Lengkapi detail pengecekan area tugas anda.',
-                              style: GoogleFonts.inter(
-                                fontSize: 13,
-                                color: const Color(0xFF94A3B8),
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-
-                            // ── Card 1: Jadwal Patroli ─────────────────
-                            _SectionCard(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _CardHeader(
-                                    icon: Icons.access_time_outlined,
-                                    label: 'JADWAL PATROLI',
-                                  ),
-                                  const SizedBox(height: 16),
-                                  _TimeField(
-                                    label: 'Jam Mulai',
-                                    value: _formatTime(_jamMulai),
-                                    onTap: () => _pickTime(isMulai: true),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  _TimeField(
-                                    label: 'Jam Selesai',
-                                    value: _formatTime(_jamSelesai),
-                                    onTap: () => _pickTime(isMulai: false),
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                            const SizedBox(height: 14),
-
-                            // ── Card 2: Blok Patroli ───────────────────
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(18),
-                              decoration: BoxDecoration(
-                                color: AppColors.primary.withOpacity(0.08),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: AppColors.primary.withOpacity(0.15),
-                                ),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Blok Patroli',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.primary,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Blok A, B, & C',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.bold,
-                                      color: const Color(0xFF0D1B2A),
-                                    ),
-                                  ),
-                                  Text(
-                                    'Seluruh Area Blok',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 13,
-                                      color: const Color(0xFF94A3B8),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 14),
-                                  Divider(
-                                    color: AppColors.primary.withOpacity(0.15),
-                                    height: 1,
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text(
-                                        'Cuaca saat ini',
-                                        style: GoogleFonts.inter(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w500,
-                                          color: const Color(0xFF0D1B2A),
-                                        ),
-                                      ),
-                                      Row(
-                                        children: [
-                                          Icon(Icons.cloud_outlined,
-                                              size: 16,
-                                              color: AppColors.primary),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            'Cerah',
-                                            style: GoogleFonts.inter(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.w600,
-                                              color: AppColors.primary,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                            const SizedBox(height: 14),
-
-                            // ── Card 3: Keterangan Patroli ─────────────
-                            _SectionCard(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // Header dengan tombol Unggah Foto
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Icon(Icons.menu,
-                                              size: 16,
-                                              color: AppColors.primary),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            'KETERANGAN PATROLI',
-                                            style: GoogleFonts.inter(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w700,
-                                              color: const Color(0xFF94A3B8),
-                                              letterSpacing: 0.5,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      GestureDetector(
-                                        onTap: () {
-                                          // TODO: image picker
-                                        },
-                                        child: Row(
-                                          children: [
-                                            Icon(Icons.camera_alt_outlined,
-                                                size: 16,
-                                                color: AppColors.primary),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              'Unggah Foto',
-                                              style: GoogleFonts.inter(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w600,
-                                                color: AppColors.primary,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-
-                                  const SizedBox(height: 12),
-
-                                  // Text area
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFF4F6F9),
-                                      borderRadius: BorderRadius.circular(10),
-                                      border: Border.all(
-                                          color: Colors.grey.shade200),
-                                    ),
-                                    child: TextField(
-                                      controller: _keteranganController,
-                                      maxLines: 6,
-                                      style: GoogleFonts.inter(
-                                        fontSize: 14,
-                                        color: const Color(0xFF0D1B2A),
-                                      ),
-                                      decoration: InputDecoration(
-                                        border: InputBorder.none,
-                                        contentPadding:
-                                            const EdgeInsets.all(14),
-                                        hintText:
-                                            'Tuliskan temuan atau rutinitas patroli di sini... '
-                                            '(Contoh: Pintu darurat terkunci, lampu lorong '
-                                            'menyala normal, tidak ada aktivitas mencurigakan)',
-                                        hintStyle: GoogleFonts.inter(
-                                          fontSize: 13,
-                                          color: const Color(0xFFB0BEC5),
-                                          height: 1.5,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-
-                                  const SizedBox(height: 14),
-
-                                  // Quick tag chips
-                                  Wrap(
-                                    spacing: 8,
-                                    runSpacing: 8,
-                                    children: _quickTags.map((tag) {
-                                      final isSelected =
-                                          _selectedTags.contains(tag);
-                                      return GestureDetector(
-                                        onTap: () => setState(() {
-                                          isSelected
-                                              ? _selectedTags.remove(tag)
-                                              : _selectedTags.add(tag);
-                                        }),
-                                        child: AnimatedContainer(
-                                          duration: const Duration(
-                                              milliseconds: 150),
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 14, vertical: 8),
-                                          decoration: BoxDecoration(
-                                            color: isSelected
-                                                ? AppColors.primary
-                                                : Colors.white,
-                                            borderRadius:
-                                                BorderRadius.circular(20),
-                                            border: Border.all(
-                                              color: isSelected
-                                                  ? AppColors.primary
-                                                  : Colors.grey.shade300,
-                                            ),
-                                          ),
-                                          child: Text(
-                                            tag,
-                                            style: GoogleFonts.inter(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w600,
-                                              color: isSelected
-                                                  ? Colors.white
-                                                  : const Color(0xFF0D1B2A),
-                                            ),
-                                          ),
-                                        ),
-                                      );
-                                    }).toList(),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                      child: switch (_state) {
+                        _PatroliState.loading => const Center(
+                            child: CircularProgressIndicator(strokeWidth: 2)),
+                        _PatroliState.idle   => _buildIdle(),
+                        _PatroliState.active => _buildActive(),
+                      },
                     ),
                   ],
                 ),
               ),
             ),
 
-            // ── Bottom: Tombol + Nav ───────────────────────────────────
+            // Bottom Nav selalu tampil
             Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Tombol Simpan
-                  Container(
-                    color: const Color(0xFFF4F6F9),
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
-                    child: Column(
-                      children: [
-                        SizedBox(
-                          width: double.infinity,
-                          height: 54,
-                          child: ElevatedButton.icon(
-                            onPressed: _simpanLaporan,
-                            icon: const Icon(Icons.save_outlined,
-                                color: Colors.white, size: 20),
-                            label: Text(
-                              'Simpan Laporan',
-                              style: GoogleFonts.inter(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Laporan akan langsung diteruskan ke Command Center.',
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            color: const Color(0xFF94A3B8),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Bottom Nav
-                  _SatpamBottomNav(currentIndex: 1),
-                ],
-              ),
+              bottom: 0, left: 0, right: 0,
+              child: SatpamBottomNav(currentIndex: 1),
             ),
           ],
         ),
       ),
     );
   }
-}
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Top Bar
-// ─────────────────────────────────────────────────────────────────────────────
-class _TopBar extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: Colors.white,
-      padding: EdgeInsets.only(
-        top: MediaQuery.of(context).padding.top + 8,
-        left: 20,
-        right: 20,
-        bottom: 12,
-      ),
-      child: Row(
+  // ─────────────────────────────────────────────────────────────────────────
+  // STATE: IDLE — belum ada patroli aktif
+  // ─────────────────────────────────────────────────────────────────────────
+
+  Widget _buildIdle() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.security, color: AppColors.primary, size: 22),
-          const SizedBox(width: 8),
-          Text(
-            'SECURITY OPS',
-            style: GoogleFonts.inter(
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
-              color: AppColors.primary,
-              letterSpacing: 0.5,
+          // Status badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Container(
+                width: 8, height: 8,
+                decoration: BoxDecoration(
+                    color: Colors.grey.shade400, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 6),
+              Text('Tidak Ada Patroli Aktif', style: GoogleFonts.inter(
+                fontSize: 12, fontWeight: FontWeight.w600,
+                color: Colors.grey.shade600,
+              )),
+            ]),
+          ),
+
+          const SizedBox(height: 20),
+
+          Text('Mulai Patroli Baru', style: GoogleFonts.inter(
+            fontSize: 26, fontWeight: FontWeight.bold,
+            color: const Color(0xFF0D1B2A),
+          )),
+          const SizedBox(height: 4),
+          Text('Tentukan area patroli, lalu tekan mulai.', style: GoogleFonts.inter(
+            fontSize: 13, color: const Color(0xFF94A3B8),
+          )),
+
+          const SizedBox(height: 28),
+
+          // Ilustrasi
+          Center(
+            child: Container(
+              width: 120, height: 120,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.08),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.shield_outlined, size: 56, color: AppColors.primary),
             ),
           ),
-          const Spacer(),
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.grey.shade200),
+
+          const SizedBox(height: 28),
+
+          // Card: input blok
+          _SectionCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _CardHeader(icon: Icons.grid_view_outlined, label: 'AREA / BLOK PATROLI'),
+                const SizedBox(height: 12),
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF4F6F9),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: TextField(
+                    controller: _blokMulaiController,
+                    style: GoogleFonts.inter(
+                        fontSize: 14, color: const Color(0xFF0D1B2A)),
+                    decoration: InputDecoration(
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 14),
+                      hintText: 'Contoh: Blok A, B, C',
+                      hintStyle: GoogleFonts.inter(
+                          fontSize: 13, color: const Color(0xFFB0BEC5)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Waktu mulai akan dicatat otomatis saat tombol ditekan.',
+                  style: GoogleFonts.inter(
+                      fontSize: 11, color: const Color(0xFF94A3B8)),
+                ),
+              ],
             ),
-            child: const Icon(Icons.person_outline,
-                size: 20, color: Color(0xFF0D1B2A)),
+          ),
+
+          const SizedBox(height: 28),
+
+          // Tombol mulai
+          SizedBox(
+            width: double.infinity,
+            height: 56,
+            child: ElevatedButton.icon(
+              onPressed: _saving ? null : _mulaiPatroli,
+              icon: _saving
+                  ? const SizedBox(
+                      width: 18, height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.play_arrow_rounded,
+                      color: Colors.white, size: 22),
+              label: Text(
+                _saving ? 'Memulai...' : 'MULAI PATROLI',
+                style: GoogleFonts.inter(
+                    fontSize: 16, fontWeight: FontWeight.bold,
+                    color: Colors.white),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // STATE: ACTIVE — patroli sedang berjalan
+  // ─────────────────────────────────────────────────────────────────────────
+
+  Widget _buildActive() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Banner patroli aktif
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(children: [
+              Container(
+                width: 10, height: 10,
+                decoration: const BoxDecoration(
+                    color: Colors.white, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 10),
+              Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Patroli Sedang Berjalan', style: GoogleFonts.inter(
+                    fontSize: 14, fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  )),
+                  const SizedBox(height: 2),
+                  Text('Mulai pukul $_activeJamMulai  ·  $_activeBlok',
+                      style: GoogleFonts.inter(
+                          fontSize: 12, color: Colors.white70)),
+                ],
+              )),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text('AKTIF', style: GoogleFonts.inter(
+                  fontSize: 11, fontWeight: FontWeight.bold,
+                  color: Colors.white, letterSpacing: 0.5,
+                )),
+              ),
+            ]),
+          ),
+
+          const SizedBox(height: 20),
+
+          Text('Laporan Patroli', style: GoogleFonts.inter(
+            fontSize: 22, fontWeight: FontWeight.bold,
+            color: const Color(0xFF0D1B2A),
+          )),
+          const SizedBox(height: 4),
+          Text('Isi keterangan dan temuan selama patroli berlangsung.',
+              style: GoogleFonts.inter(
+                  fontSize: 13, color: const Color(0xFF94A3B8))),
+
+          const SizedBox(height: 20),
+
+          // Card keterangan + foto
+          _SectionCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header + tombol foto
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _CardHeader(icon: Icons.menu, label: 'KETERANGAN PATROLI'),
+                    GestureDetector(
+                      onTap: _fotos.length >= _maxFotos ? null : _pickFoto,
+                      child: Row(children: [
+                        Icon(Icons.camera_alt_outlined, size: 16,
+                            color: _fotos.length >= _maxFotos
+                                ? Colors.grey
+                                : AppColors.primary),
+                        const SizedBox(width: 4),
+                        Text(
+                          _fotos.length >= _maxFotos
+                              ? 'Maks $_maxFotos foto'
+                              : 'Foto (${_fotos.length}/$_maxFotos)',
+                          style: GoogleFonts.inter(
+                            fontSize: 12, fontWeight: FontWeight.w600,
+                            color: _fotos.length >= _maxFotos
+                                ? Colors.grey
+                                : AppColors.primary,
+                          ),
+                        ),
+                      ]),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 12),
+
+                // Text area
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF4F6F9),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: TextField(
+                    controller: _keteranganController,
+                    maxLines: 5,
+                    style: GoogleFonts.inter(
+                        fontSize: 14, color: const Color(0xFF0D1B2A)),
+                    decoration: InputDecoration(
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.all(14),
+                      hintText:
+                          'Tuliskan temuan atau rutinitas patroli... '
+                          '(Contoh: Tidak ada aktivitas mencurigakan, '
+                          'lampu lorong menyala normal)',
+                      hintStyle: GoogleFonts.inter(
+                        fontSize: 13, color: const Color(0xFFB0BEC5),
+                        height: 1.5,
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Preview foto
+                if (_fotos.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    height: 90,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _fotos.length +
+                          (_fotos.length < _maxFotos ? 1 : 0),
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (_, i) {
+                        if (i == _fotos.length) {
+                          return GestureDetector(
+                            onTap: _pickFoto,
+                            child: Container(
+                              width: 90, height: 90,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF4F6F9),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                    color: Colors.grey.shade300),
+                              ),
+                              child: Icon(Icons.add_photo_alternate_outlined,
+                                  size: 28, color: AppColors.primary),
+                            ),
+                          );
+                        }
+                        return Stack(children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: Image.memory(_fotos[i],
+                                width: 90, height: 90, fit: BoxFit.cover),
+                          ),
+                          Positioned(
+                            top: 4, right: 4,
+                            child: GestureDetector(
+                              onTap: () => _removeFoto(i),
+                              child: Container(
+                                width: 22, height: 22,
+                                decoration: const BoxDecoration(
+                                    color: Colors.red,
+                                    shape: BoxShape.circle),
+                                child: const Icon(Icons.close,
+                                    size: 14, color: Colors.white),
+                              ),
+                            ),
+                          ),
+                        ]);
+                      },
+                    ),
+                  ),
+                ],
+
+                const SizedBox(height: 14),
+
+                // Quick tags
+                Wrap(
+                  spacing: 8, runSpacing: 8,
+                  children: _quickTags.map((tag) {
+                    final selected = _selectedTags.contains(tag);
+                    return GestureDetector(
+                      onTap: () => setState(() =>
+                          selected ? _selectedTags.remove(tag)
+                                   : _selectedTags.add(tag)),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: selected ? AppColors.primary : Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: selected
+                                ? AppColors.primary
+                                : Colors.grey.shade300,
+                          ),
+                        ),
+                        child: Text(tag, style: GoogleFonts.inter(
+                          fontSize: 12, fontWeight: FontWeight.w600,
+                          color: selected
+                              ? Colors.white
+                              : const Color(0xFF0D1B2A),
+                        )),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // Tombol selesai
+          SizedBox(
+            width: double.infinity,
+            height: 56,
+            child: ElevatedButton.icon(
+              onPressed: _saving ? null : _selesaiPatroli,
+              icon: _saving
+                  ? const SizedBox(
+                      width: 18, height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.check_circle_outline,
+                      color: Colors.white, size: 22),
+              label: Text(
+                _saving ? 'Menyimpan...' : 'SELESAI PATROLI',
+                style: GoogleFonts.inter(
+                    fontSize: 16, fontWeight: FontWeight.bold,
+                    color: Colors.white),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF16A34A),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 10),
+
+          Center(
+            child: Text(
+              'Waktu selesai akan dicatat otomatis saat tombol ditekan.',
+              style: GoogleFonts.inter(
+                  fontSize: 11, color: const Color(0xFF94A3B8)),
+            ),
           ),
         ],
       ),
@@ -475,8 +697,43 @@ class _TopBar extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Reusable: white card dengan shadow
+// Top Bar
 // ─────────────────────────────────────────────────────────────────────────────
+
+class _TopBar extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.white,
+      padding: EdgeInsets.only(
+        top: MediaQuery.of(context).padding.top + 8,
+        left: 20, right: 20, bottom: 12,
+      ),
+      child: Row(children: [
+        Icon(Icons.security, color: AppColors.primary, size: 22),
+        const SizedBox(width: 8),
+        Text('SECURITY OPS', style: GoogleFonts.inter(
+          fontSize: 15, fontWeight: FontWeight.bold,
+          color: AppColors.primary, letterSpacing: 0.5,
+        )),
+        const Spacer(),
+        Container(
+          width: 38, height: 38,
+          decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.grey.shade200)),
+          child: const Icon(Icons.person_outline,
+              size: 20, color: Color(0xFF0D1B2A)),
+        ),
+      ]),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Reusable widgets
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _SectionCard extends StatelessWidget {
   const _SectionCard({required this.child});
   final Widget child;
@@ -490,11 +747,8 @@ class _SectionCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.04),
+              blurRadius: 12, offset: const Offset(0, 4)),
         ],
       ),
       child: child,
@@ -502,9 +756,6 @@ class _SectionCard extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Reusable: header icon + label dalam card
-// ─────────────────────────────────────────────────────────────────────────────
 class _CardHeader extends StatelessWidget {
   const _CardHeader({required this.icon, required this.label});
   final IconData icon;
@@ -512,166 +763,13 @@ class _CardHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, size: 16, color: AppColors.primary),
-        const SizedBox(width: 8),
-        Text(
-          label,
-          style: GoogleFonts.inter(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: const Color(0xFF94A3B8),
-            letterSpacing: 0.5,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Reusable: time field (tapable)
-// ─────────────────────────────────────────────────────────────────────────────
-class _TimeField extends StatelessWidget {
-  const _TimeField({
-    required this.label,
-    required this.value,
-    required this.onTap,
-  });
-  final String label;
-  final String value;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: GoogleFonts.inter(
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-            color: const Color(0xFF0D1B2A),
-          ),
-        ),
-        const SizedBox(height: 6),
-        GestureDetector(
-          onTap: onTap,
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF4F6F9),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.grey.shade200),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  value,
-                  style: GoogleFonts.inter(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                    color: const Color(0xFF0D1B2A),
-                  ),
-                ),
-                Icon(Icons.access_time_outlined,
-                    size: 18, color: Colors.grey.shade400),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Bottom Nav Bar Satpam
-// ─────────────────────────────────────────────────────────────────────────────
-class _SatpamBottomNav extends StatelessWidget {
-  const _SatpamBottomNav({required this.currentIndex});
-  final int currentIndex;
-
-  static const _items = [
-    (icon: Icons.dashboard_outlined, label: 'Dashboard', route: AppRouter.satpamHome),
-    (icon: Icons.shield_outlined,    label: 'Patrol',    route: AppRouter.satpamPatroli),
-    (icon: Icons.crisis_alert,       label: 'Incidents', route: AppRouter.satpamReports),
-    (icon: Icons.assignment_outlined, label: 'Requests', route: AppRouter.satpamCatatTamu),
-  ];
-
-  void _onTap(BuildContext context, int index) {
-    if (index == currentIndex) return;
-    Navigator.pushNamed(context, _items[index].route);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: Colors.grey.shade200)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 12,
-            offset: const Offset(0, -4),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: List.generate(_items.length, (i) {
-              final isActive = i == currentIndex;
-              return GestureDetector(
-                onTap: () => _onTap(context, i),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: isActive
-                            ? AppColors.primary.withOpacity(0.12)
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Icon(
-                        _items[i].icon,
-                        color: isActive
-                            ? AppColors.primary
-                            : const Color(0xFFB0BEC5),
-                        size: 22,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _items[i].label,
-                      style: GoogleFonts.inter(
-                        fontSize: 10,
-                        fontWeight:
-                            isActive ? FontWeight.bold : FontWeight.w500,
-                        color: isActive
-                            ? AppColors.primary
-                            : const Color(0xFFB0BEC5),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }),
-          ),
-        ),
-      ),
-    );
+    return Row(children: [
+      Icon(icon, size: 16, color: AppColors.primary),
+      const SizedBox(width: 8),
+      Text(label, style: GoogleFonts.inter(
+        fontSize: 11, fontWeight: FontWeight.w700,
+        color: const Color(0xFF94A3B8), letterSpacing: 0.5,
+      )),
+    ]);
   }
 }

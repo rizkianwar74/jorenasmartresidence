@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/router/app_router.dart';
+import '../../auth/auth_repository.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AdminTopBar — reusable di semua halaman admin
@@ -118,44 +121,151 @@ class AdminTopBar extends StatelessWidget {
 
           const SizedBox(width: 16),
 
-          // ── Admin profile ─────────────────────────────────────────────
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 18,
-                backgroundColor: AppColors.primary.withOpacity(0.15),
-                child: Text(
-                  adminName.isNotEmpty ? adminName[0] : 'A',
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primary,
+          // ── Admin profile + dropdown ──────────────────────────────────
+          PopupMenuButton<String>(
+            offset: const Offset(0, 48),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            elevation: 8,
+            color: Colors.white,
+            onSelected: (value) async {
+              if (value == 'logout') {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                    title: Text('Keluar',
+                        style: GoogleFonts.inter(
+                            fontWeight: FontWeight.bold)),
+                    content: Text(
+                      'Apakah Anda yakin ingin keluar dari akun admin?',
+                      style: GoogleFonts.inter(fontSize: 14),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: Text('Batal',
+                            style: GoogleFonts.inter(
+                                color: AppColors.textGrey)),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red.shade600,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8)),
+                        ),
+                        child: Text('Keluar',
+                            style: GoogleFonts.inter(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600)),
+                      ),
+                    ],
                   ),
+                );
+                if (confirm == true) {
+                  await FirebaseAuth.instance.signOut();
+                  AuthRepository.clearUser();
+                  if (context.mounted) {
+                    Navigator.pushNamedAndRemoveUntil(
+                      context,
+                      AppRouter.login,
+                      (_) => false,
+                    );
+                  }
+                }
+              }
+            },
+            itemBuilder: (_) => [
+              PopupMenuItem<String>(
+                enabled: false,
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      adminName,
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textDark,
+                      ),
+                    ),
+                    Text(
+                      adminRole,
+                      style: GoogleFonts.inter(
+                          fontSize: 11, color: AppColors.textGrey),
+                    ),
+                    const SizedBox(height: 8),
+                    Divider(height: 1, color: Colors.grey.shade200),
+                  ],
                 ),
               ),
-              const SizedBox(width: 10),
-              Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    adminName,
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textDark,
+              PopupMenuItem<String>(
+                value: 'logout',
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 4),
+                child: Row(
+                  children: [
+                    Icon(Icons.logout,
+                        size: 17, color: Colors.red.shade600),
+                    const SizedBox(width: 10),
+                    Text(
+                      'Keluar',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        color: Colors.red.shade600,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                  ),
-                  Text(
-                    adminRole,
-                    style: GoogleFonts.inter(
-                      fontSize: 11,
-                      color: AppColors.textGrey,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 18,
+                  backgroundColor: AppColors.primary.withOpacity(0.15),
+                  child: Text(
+                    adminName.isNotEmpty ? adminName[0] : 'A',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      adminName,
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textDark,
+                      ),
+                    ),
+                    Text(
+                      adminRole,
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        color: AppColors.textGrey,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 6),
+                Icon(Icons.keyboard_arrow_down,
+                    size: 16, color: AppColors.textGrey),
+              ],
+            ),
           ),
         ],
       ),

@@ -27,28 +27,25 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
-
-    final error =
-        await AuthRepository.resetPassword(_emailController.text);
+    final error = await AuthRepository.resetPassword(_emailController.text);
+    if (!mounted) return;
 
     setState(() => _isLoading = false);
 
-    if (!mounted) return;
-
-    if (error == null) {
-      setState(() => _isSuccess = true);
-    } else {
+    if (error != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(error, style: GoogleFonts.inter(fontSize: 13)),
           backgroundColor: Colors.red.shade600,
           behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           margin: const EdgeInsets.all(16),
         ),
       );
+      return;
     }
+
+    setState(() => _isSuccess = true);
   }
 
   @override
@@ -211,9 +208,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                       width: 22,
                       height: 22,
                       child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2.5,
-                      ),
+                          color: Colors.white, strokeWidth: 2.5),
                     )
                   : Text(
                       'KIRIM LINK RESET',

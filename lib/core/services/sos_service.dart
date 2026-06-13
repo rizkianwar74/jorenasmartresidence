@@ -250,37 +250,45 @@ class SosService {
   }
 
   // ── Stream alert aktif (PENDING / ON_MY_WAY) — satpam listen ─────────────
+  // Tidak pakai orderBy agar tidak perlu composite index — sort client-side
   static Stream<List<SosAlert>> watchActiveAlerts() {
     return _col
         .where('status', whereIn: ['PENDING', 'ON_MY_WAY'])
-        .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snap) => snap.docs.map(SosAlert.fromDoc).toList());
+        .map((snap) {
+          final list = snap.docs.map(SosAlert.fromDoc).toList();
+          list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return list;
+        });
   }
 
   // ── Stream riwayat alert milik user tertentu ──────────────────────────────
+  // Tidak pakai orderBy — sort client-side
   static Stream<List<SosAlert>> watchUserHistory(String uid) {
     return _col
         .where('userId', isEqualTo: uid)
-        .orderBy('createdAt', descending: true)
-        .limit(20)
         .snapshots()
-        .map((snap) => snap.docs.map(SosAlert.fromDoc).toList());
+        .map((snap) {
+          final list = snap.docs.map(SosAlert.fromDoc).toList();
+          list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return list.take(20).toList();
+        });
   }
 
   // ── Cek apakah user punya alert aktif (belum selesai) ────────────────────
-  // Dipakai agar user tidak kirim SOS dobel
+  // Dipakai agar user tidak kirim SOS dobel — filter client-side
   static Future<SosAlert?> getActiveAlertForUser(String uid) async {
     try {
       final snap = await _col
           .where('userId', isEqualTo: uid)
-          .where('status', whereIn: ['PENDING', 'ON_MY_WAY'])
-          .orderBy('createdAt', descending: true)
-          .limit(1)
           .get();
 
-      if (snap.docs.isEmpty) return null;
-      return SosAlert.fromDoc(snap.docs.first);
+      final list = snap.docs.map(SosAlert.fromDoc).toList();
+      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return list.firstWhere(
+        (a) => a.status == SosStatus.pending || a.status == SosStatus.onMyWay,
+        orElse: () => throw StateError('none'),
+      );
     } catch (_) {
       return null;
     }

@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import '../../core/theme/app_colors.dart';
 import '../auth/auth_repository.dart';
 import 'widgets/admin_sidebar.dart';
+import 'widgets/admin_top_bar.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mock data
@@ -118,7 +119,7 @@ class AdminHomePage extends StatelessWidget {
             child: Column(
               children: [
                 // Top bar
-                const _TopBar(),
+                const AdminTopBar(searchHint: 'Search residents, units, or incidents...'),
                 // Scrollable body
                 Expanded(
                   child: SingleChildScrollView(
@@ -153,126 +154,6 @@ class AdminHomePage extends StatelessWidget {
                 ),
               ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Top Bar
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _TopBar extends StatelessWidget {
-  const _TopBar();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 64,
-      color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Row(
-        children: [
-          // Search bar
-          Expanded(
-            child: Container(
-              height: 40,
-              constraints: const BoxConstraints(maxWidth: 480),
-              decoration: BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.grey.shade200),
-              ),
-              child: Row(
-                children: [
-                  const SizedBox(width: 12),
-                  Icon(Icons.search, size: 18, color: AppColors.textGrey),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Search residents, units, or incidents...',
-                      style: GoogleFonts.inter(
-                        fontSize: 13,
-                        color: AppColors.textGrey,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          const Spacer(),
-
-          // Bell notification
-          Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppColors.background,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.notifications_outlined,
-                  size: 20,
-                  color: AppColors.textGrey,
-                ),
-              ),
-              Positioned(
-                top: 6,
-                right: 8,
-                child: Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: Colors.red,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(width: 16),
-          Container(width: 1, height: 32, color: Colors.grey.shade200),
-          const SizedBox(width: 16),
-
-          // Profile
-          Row(
-            children: [
-              Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    'Admin Profile',
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textDark,
-                    ),
-                  ),
-                  Text(
-                    'Administrator',
-                    style: GoogleFonts.inter(
-                      fontSize: 11,
-                      color: AppColors.textGrey,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(width: 10),
-              CircleAvatar(
-                radius: 18,
-                backgroundColor: AppColors.primary.withOpacity(0.15),
-                child: Icon(Icons.person, size: 20, color: AppColors.primary),
-              ),
-            ],
           ),
         ],
       ),

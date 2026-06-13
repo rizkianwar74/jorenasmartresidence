@@ -5,20 +5,177 @@
 // - Avatar dari initial nama jika tidak ada foto
 // - Tombol Keluar aktif dengan konfirmasi dialog + navigate ke login
 
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/router/app_router.dart';
 import '../auth/auth_repository.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'widgets/profile_avatar.dart';
 import 'widgets/unit_info_card.dart';
 import 'widgets/personal_info_card.dart';
 import 'widgets/profile_menu_item.dart';
 
-class ProfilPage extends StatelessWidget {
+class ProfilPage extends StatefulWidget {
   const ProfilPage({super.key});
 
+  @override
+  State<ProfilPage> createState() => _ProfilPageState();
+}
+
+class _ProfilPageState extends State<ProfilPage> {
   static const double _contentMaxWidth = 600.0;
+  bool       _uploadingPhoto = false;
+  Uint8List? _photoBytes;        // preview lokal sebelum tersimpan
+
+  // ── Pilih foto → readAsBytes → encode base64 → simpan ke Firestore ───────
+  Future<void> _pickAndUpload(ImageSource source) async {
+    Navigator.pop(context);
+
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source      : source,
+      imageQuality: 60,
+      maxWidth    : 600,
+    );
+    if (picked == null) return;
+
+    // Baca bytes — cara yang sama seperti upload thumbnail berita
+    final bytes = await picked.readAsBytes();
+
+    setState(() {
+      _photoBytes    = bytes;
+      _uploadingPhoto = true;
+    });
+
+    try {
+      final base64Str = base64Encode(bytes);
+      final dataUri   = 'data:image/jpeg;base64,$base64Str';
+      await AuthRepository.updatePhotoUrl(dataUri);
+      if (mounted) setState(() {});
+    } catch (e) {
+      if (mounted) {
+        // Batalkan preview lokal jika gagal simpan
+        setState(() => _photoBytes = null);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Gagal menyimpan foto: $e',
+                style: GoogleFonts.inter(fontSize: 13)),
+            backgroundColor: Colors.red.shade600,
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _uploadingPhoto = false);
+    }
+  }
+
+  Future<void> _deletePhoto() async {
+    Navigator.pop(context); // tutup bottom sheet
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Hapus Foto Profil?',
+            style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+        content: Text(
+          'Foto profil akan dihapus dan diganti dengan inisial nama.',
+          style: GoogleFonts.inter(fontSize: 14, color: AppColors.textGrey, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Batal', style: GoogleFonts.inter(color: AppColors.textGrey)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('Hapus',
+                style: GoogleFonts.inter(color: Colors.red, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() { _uploadingPhoto = true; _photoBytes = null; });
+    try {
+      await AuthRepository.removePhotoUrl();
+      if (mounted) setState(() {});
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Gagal menghapus foto: $e',
+                style: GoogleFonts.inter(fontSize: 13)),
+            backgroundColor: Colors.red.shade600,
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _uploadingPhoto = false);
+    }
+  }
+
+  void _showPickerSheet() {
+    final hasPhoto = AuthRepository.currentUser?.photoUrl?.isNotEmpty == true
+        || _photoBytes != null;
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40, height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.camera_alt_outlined),
+                title: Text('Ambil dari Kamera',
+                    style: GoogleFonts.inter(fontSize: 15)),
+                onTap: () => _pickAndUpload(ImageSource.camera),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined),
+                title: Text('Pilih dari Galeri',
+                    style: GoogleFonts.inter(fontSize: 15)),
+                onTap: () => _pickAndUpload(ImageSource.gallery),
+              ),
+              if (hasPhoto)
+                ListTile(
+                  leading: const Icon(Icons.delete_outline, color: Colors.red),
+                  title: Text('Hapus Foto',
+                      style: GoogleFonts.inter(fontSize: 15, color: Colors.red)),
+                  onTap: _deletePhoto,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   // ── Label & warna badge per role ────────────────────────────────────────
   String _roleLabel(UserRole role) => switch (role) {
@@ -38,12 +195,6 @@ class ProfilPage extends StatelessWidget {
         UserRole.satpam  => Colors.teal.shade700,
         UserRole.user    => AppColors.primary,
       };
-
-  // ── Avatar URL dari inisial nama ────────────────────────────────────────
-  String _avatarUrl(String nama) {
-    final encoded = Uri.encodeComponent(nama);
-    return 'https://ui-avatars.com/api/?name=$encoded&background=1173D4&color=fff&size=200';
-  }
 
   // ── Konfirmasi logout ────────────────────────────────────────────────────
   Future<void> _onLogout(BuildContext context) async {
@@ -103,29 +254,31 @@ class ProfilPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Ambil data dari AuthRepository — sudah terisi saat login
-    final user = AuthRepository.currentUser;
-    final namaLengkap = user?.namaLengkap ?? 'Pengguna';
-    final email       = user?.username ?? '-';
-    final blok        = user?.blok ?? '-';
-    final nomorUnit   = user?.nomorUnit ?? '-';
-    final role        = user?.role ?? UserRole.user;
+    final user         = AuthRepository.currentUser;
+    final namaLengkap  = user?.namaLengkap   ?? 'Pengguna';
+    final blok         = user?.blok           ?? '-';
+    final nomorUnit    = user?.nomorUnit      ?? '-';
+    final role         = user?.role           ?? UserRole.user;
+    final email        = user?.email          ?? '-';
+    final nomorHp      = user?.nomorHp        ?? '-';
+    final tanggalLahir = user?.tanggalLahir   ?? '-';
 
-    // Info card — dinamis dari data user
+    // Info card — email, no telepon, tanggal lahir
     final infoItems = [
       PersonalInfoItem(
-        icon: Icons.email_outlined,
-        value: email,
+        icon : Icons.email_outlined,
         label: 'Email',
+        value: email.isEmpty || email == '-' ? 'Belum diisi' : email,
       ),
       PersonalInfoItem(
-        icon: Icons.apartment_outlined,
-        value: blok.isEmpty || blok == '-' ? 'Belum diisi' : blok,
-        label: 'Blok',
+        icon : Icons.phone_outlined,
+        label: 'No. Telepon',
+        value: nomorHp.isEmpty || nomorHp == '-' ? 'Belum diisi' : nomorHp,
       ),
       PersonalInfoItem(
-        icon: Icons.door_front_door_outlined,
-        value: nomorUnit.isEmpty || nomorUnit == '-' ? 'Belum diisi' : 'No. $nomorUnit',
-        label: 'Nomor Unit',
+        icon : Icons.cake_outlined,
+        label: 'Tanggal Lahir',
+        value: tanggalLahir.isEmpty || tanggalLahir == '-' ? 'Belum diisi' : tanggalLahir,
       ),
     ];
 
@@ -158,12 +311,33 @@ class ProfilPage extends StatelessWidget {
               children: [
                 const SizedBox(height: 24),
 
-                // ── Avatar dari inisial nama ───────────────────────────
-                ProfileAvatar(
-                  imageUrl: _avatarUrl(namaLengkap),
-                  onEditTap: () {
-                    // TODO: ganti foto profil
-                  },
+                // ── Avatar ────────────────────────────────────────────
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    ProfileAvatar(
+                      imageUrl : _photoBytes != null
+                          ? 'data:image/jpeg;base64,${base64Encode(_photoBytes!)}'
+                          : AuthRepository.currentUser?.photoUrl,
+                      name     : namaLengkap,
+                      onEditTap: _uploadingPhoto ? null : _showPickerSheet,
+                    ),
+                    if (_uploadingPhoto)
+                      Positioned.fill(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.4),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Center(
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
 
                 const SizedBox(height: 16),
@@ -222,17 +396,8 @@ class ProfilPage extends StatelessWidget {
                   icon: Icons.settings_outlined,
                   label: 'Pengaturan Akun',
                   isFirst: true,
-                  onTap: () {
-                    // TODO: navigasi ke pengaturan akun
-                  },
-                ),
-                ProfileMenuItem(
-                  icon: Icons.security_outlined,
-                  label: 'Keamanan & Privasi',
                   isLast: true,
-                  onTap: () {
-                    // TODO: navigasi ke keamanan & privasi
-                  },
+                  onTap: () => Navigator.pushNamed(context, AppRouter.pengaturan),
                 ),
 
                 const SizedBox(height: 28),

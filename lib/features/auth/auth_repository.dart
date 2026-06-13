@@ -12,6 +12,9 @@ class AuthResult {
     required this.blok,
     required this.nomorUnit,
     required this.role,
+    required this.email,
+    required this.nomorHp,
+    required this.tanggalLahir,
     this.photoUrl,
   });
 
@@ -20,7 +23,32 @@ class AuthResult {
   final String blok;
   final String nomorUnit;
   final UserRole role;
+  final String email;
+  final String nomorHp;
+  final String tanggalLahir;
   final String? photoUrl;
+
+  // clearPhoto: true → paksa photoUrl jadi null
+  AuthResult copyWith({
+    String? username,
+    String? email,
+    String? nomorHp,
+    String? tanggalLahir,
+    String? blok,
+    String? nomorUnit,
+    String? photoUrl,
+    bool clearPhoto = false,
+  }) => AuthResult(
+        username     : username     ?? this.username,
+        namaLengkap  : namaLengkap,
+        blok         : blok         ?? this.blok,
+        nomorUnit    : nomorUnit    ?? this.nomorUnit,
+        role         : role,
+        email        : email        ?? this.email,
+        nomorHp      : nomorHp      ?? this.nomorHp,
+        tanggalLahir : tanggalLahir ?? this.tanggalLahir,
+        photoUrl     : clearPhoto ? null : (photoUrl ?? this.photoUrl),
+      );
 }
 
 // ── Tiga role yang tersedia ──────────────────────────────────────────────────
@@ -46,6 +74,63 @@ class AuthRepository {
   static AuthResult? get currentUser => _currentUser;
   static bool get isLoggedIn => _currentUser != null;
 
+  // ── Logout — bersihkan in-memory session ──────────────────────────────────
+  static void clearUser() => _currentUser = null;
+
+  // ── Update field profil (in-memory + Firestore) ──────────────────────────
+  static Future<void> updateProfile(String field, String value) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .update({field: value.trim()});
+    _currentUser = _currentUser?.copyWith(
+      username    : field == 'username'     ? value.trim() : null,
+      email       : field == 'email'        ? value.trim() : null,
+      nomorHp     : field == 'nomorHp'      ? value.trim() : null,
+      tanggalLahir: field == 'tanggalLahir' ? value.trim() : null,
+      blok        : field == 'blok'         ? value.trim() : null,
+      nomorUnit   : field == 'nomorUnit'    ? value.trim() : null,
+    );
+  }
+
+  // ── Update blok + nomorUnit sekaligus ────────────────────────────────────
+  static Future<void> updateAlamat(String blok, String nomorUnit) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .update({'blok': blok.trim(), 'nomorUnit': nomorUnit.trim()});
+    _currentUser = _currentUser?.copyWith(
+      blok     : blok.trim(),
+      nomorUnit: nomorUnit.trim(),
+    );
+  }
+
+  // ── Update foto profil (in-memory + Firestore) ────────────────────────────
+  static Future<void> updatePhotoUrl(String url) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .update({'photoUrl': url});
+    _currentUser = _currentUser?.copyWith(photoUrl: url);
+  }
+
+  // ── Hapus foto profil (set null di Firestore + in-memory) ────────────────
+  static Future<void> removePhotoUrl() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .update({'photoUrl': FieldValue.delete()});
+    _currentUser = _currentUser?.copyWith(clearPhoto: true);
+  }
+
   // ── Login ─────────────────────────────────────────────────────────────────
   static Future<AuthResult?> login(String email, String password) async {
     try {
@@ -69,21 +154,27 @@ class AuthRepository {
       final namaLengkap = (data?['namaLengkap'] as String?)?.isNotEmpty == true
           ? data!['namaLengkap'] as String
           : (user.displayName ?? 'Pengguna');
-      final blok = data?['blok'] as String? ?? '-';
-      final nomorUnit = data?['nomorUnit'] as String? ?? '-';
-      final username = data?['username'] as String? ?? '';
+      final blok         = data?['blok']          as String? ?? '-';
+      final nomorUnit    = data?['nomorUnit']      as String? ?? '-';
+      final username     = data?['username']       as String? ?? '';
+      final emailDb      = data?['email']          as String? ?? '';
+      final nomorHp      = data?['nomorHp']        as String? ?? '-';
+      final tanggalLahir = data?['tanggalLahir']   as String? ?? '-';
 
       final photoUrl = (data?['photoUrl'] as String?)?.isNotEmpty == true
           ? data!['photoUrl'] as String
           : user.photoURL;
 
       _currentUser = AuthResult(
-        username: username,
-        namaLengkap: namaLengkap,
-        blok: blok,
-        nomorUnit: nomorUnit,
-        role: role,
-        photoUrl: photoUrl,
+        username     : username,
+        namaLengkap  : namaLengkap,
+        blok         : blok,
+        nomorUnit    : nomorUnit,
+        role         : role,
+        email        : emailDb,
+        nomorHp      : nomorHp,
+        tanggalLahir : tanggalLahir,
+        photoUrl     : photoUrl,
       );
 
       return _currentUser;
@@ -141,27 +232,24 @@ class AuthRepository {
   }
 
   // ── Reset Password ────────────────────────────────────────────────────────
-  // 1. Cek dulu apakah email terdaftar di Firestore
-  // 2. Jika ada, baru kirim reset email via Firebase Auth
+  // Langsung kirim via Firebase Auth — tidak perlu cek Firestore dulu
   static Future<String?> resetPassword(String email) async {
     try {
       final cleanEmail = email.trim().toLowerCase();
 
-      // Cek email di Firestore collection 'users'
-      final query = await FirebaseFirestore.instance
+      // Langkah 1: cek apakah email terdaftar di Firestore
+      final snap = await FirebaseFirestore.instance
           .collection('users')
           .where('email', isEqualTo: cleanEmail)
           .limit(1)
           .get();
 
-      if (query.docs.isEmpty) {
+      if (snap.docs.isEmpty) {
         return 'Email tidak terdaftar. Periksa kembali alamat email Anda.';
       }
 
-      // Email ditemukan → kirim link reset
-      await FirebaseAuth.instance
-          .sendPasswordResetEmail(email: cleanEmail);
-
+      // Langkah 2: kirim link reset
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: cleanEmail);
       return null; // null = sukses
     } on FirebaseAuthException catch (e) {
       if (e.code == 'invalid-email') return 'Format email tidak valid';

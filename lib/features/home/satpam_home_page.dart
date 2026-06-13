@@ -2,13 +2,16 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:audioplayers/audioplayers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/router/app_router.dart';
 import '../../core/services/sos_service.dart';
 import '../../core/services/sos_notification_service.dart';
+import '../../core/services/bantuan_service.dart';
 import '../auth/auth_repository.dart';
+import '../../shared/widgets/satpam_bottom_nav.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Model
@@ -43,25 +46,41 @@ class SatpamHomePage extends StatefulWidget {
 class _SatpamHomePageState extends State<SatpamHomePage> {
   static const double _contentMaxWidth = 600.0;
 
-  // ── Firestore stream untuk SOS/CALL aktif ─────────────────────────────────
+  // ── Firestore stream SOS/CALL aktif ──────────────────────────────────────
   StreamSubscription<List<SosAlert>>? _alertSub;
   List<SosAlert> _activeAlerts = [];
-
-  // ── Tracking alert yang sudah diberi notif (hindari duplikat) ────────────
   final Set<String> _notifiedIds = {};
 
-  // ── Timer repeat notifikasi selama ada alert PENDING ─────────────────────
+  // ── Firestore stream bantuanrequest aktif ─────────────────────────────────
+  StreamSubscription<List<BantuanRequest>>? _bantuanSub;
+  List<BantuanRequest> _activeBantuan = [];
+  final Set<String> _notifiedBantuanIds = {};
+
+  // ── Timer repeat notifikasi SOS PENDING ──────────────────────────────────
   Timer? _repeatTimer;
 
-  // ── Audio player untuk dering SOS ────────────────────────────────────────
+  // ── Audio player SOS (loop) ───────────────────────────────────────────────
   final AudioPlayer _audioPlayer = AudioPlayer();
 
-  // ── Stats ─────────────────────────────────────────────────────────────────
-  final int _activePatrols = 2;
-  final int _pendingReports = 5;
-  final int _tamuHariIni = 8;
+  // ── Audio player bantuan (one-shot) ──────────────────────────────────────
+  final AudioPlayer _bantuanPlayer = AudioPlayer();
 
-  int get _insidenAktif => _activeAlerts.length;
+  // ── Firestore stream patroli aktif ───────────────────────────────────────
+  StreamSubscription<QuerySnapshot>? _patroliSub;
+  int _activePatrols = 0;
+
+  // ── Status bertugas ───────────────────────────────────────────────────────
+  bool _isOnDuty     = false;
+  bool _loadingDuty  = true;
+  bool _savingDuty   = false;
+
+  // ── Firestore stream insiden aktif ───────────────────────────────────────
+  StreamSubscription<QuerySnapshot>? _insidenSub;
+  int _insidenAktif = 0;
+
+  // ── Stats tamu hari ini (dari Firestore) ─────────────────────────────────
+  int _tamuHariIni = 0;
+  StreamSubscription<QuerySnapshot>? _tamuSub;
 
   // ── Mock Aktivitas ────────────────────────────────────────────────────────
   static const _mockAktivitas = [
@@ -102,47 +121,95 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
   @override
   void initState() {
     super.initState();
-    _startListening();
+    _loadDutyStatus();
+    _startListeningSos();
+    _startListeningBantuan();
+    _startListeningPatroli();
+    _startListeningInsiden();
+    _startListeningTamu();
   }
 
-  void _startListening() {
-    _alertSub = SosService.watchActiveAlerts().listen((alerts) async {
-      // Deteksi alert baru yang belum diberi notif
-      for (final alert in alerts) {
-        if (!_notifiedIds.contains(alert.id)) {
-          _notifiedIds.add(alert.id);
-          HapticFeedback.heavyImpact();
-          if (alert.type == SosType.sos) {
-            await SosNotificationService.showSosNotification(alert);
-          } else {
-            await SosNotificationService.showCallNotification(alert);
+  // ── Load status isOnDuty dari Firestore ──────────────────────────────────
+  Future<void> _loadDutyStatus() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) { setState(() => _loadingDuty = false); return; }
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+      final onDuty = (doc.data()?['isOnDuty'] as bool?) ?? false;
+      if (mounted) setState(() { _isOnDuty = onDuty; _loadingDuty = false; });
+    } catch (_) {
+      if (mounted) setState(() => _loadingDuty = false);
+    }
+  }
+
+  // ── Toggle status bertugas ────────────────────────────────────────────────
+  Future<void> _toggleDuty(bool value) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || _savingDuty) return;
+    setState(() { _savingDuty = true; _isOnDuty = value; });
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .update({'isOnDuty': value});
+    } catch (_) {
+      // Revert jika gagal
+      if (mounted) setState(() => _isOnDuty = !value);
+    } finally {
+      if (mounted) setState(() => _savingDuty = false);
+    }
+  }
+
+  void _startListeningSos() {
+    _alertSub = SosService.watchActiveAlerts().listen(
+      (alerts) async {
+        // setState dulu agar kartu SOS muncul segera
+        if (mounted) setState(() => _activeAlerts = alerts);
+
+        // Deteksi alert baru yang belum diberi notif
+        for (final alert in alerts) {
+          if (!_notifiedIds.contains(alert.id)) {
+            _notifiedIds.add(alert.id);
+            HapticFeedback.heavyImpact();
+            try {
+              if (alert.type == SosType.sos) {
+                await SosNotificationService.showSosNotification(alert);
+              } else {
+                await SosNotificationService.showCallNotification(alert);
+              }
+            } catch (_) {}
           }
         }
-      }
 
-      if (mounted) setState(() => _activeAlerts = alerts);
-
-      // Kelola dering berdasarkan ada/tidaknya alert PENDING
-      final hasPending = alerts.any((a) => a.status == SosStatus.pending);
-      if (hasPending && _repeatTimer == null) {
-        // Play mp3 alarm dengan looping
-        await _audioPlayer.setReleaseMode(ReleaseMode.loop);
-        await _audioPlayer.setVolume(1.0);
-        await _audioPlayer.play(AssetSource('sounds/alarm_ringtone_sos.mp3'));
-        // Timer untuk haptic feedback setiap 3 detik
-        _repeatTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-          final stillPending =
-              _activeAlerts.any((a) => a.status == SosStatus.pending);
-          if (!stillPending) {
-            _stopRinging();
-            return;
-          }
-          HapticFeedback.heavyImpact();
-        });
-      } else if (!hasPending) {
-        _stopRinging();
-      }
-    });
+        // Kelola dering berdasarkan ada/tidaknya alert PENDING
+        final hasPending = alerts.any((a) => a.status == SosStatus.pending);
+        if (hasPending && _repeatTimer == null) {
+          try {
+            await _audioPlayer.setReleaseMode(ReleaseMode.loop);
+            await _audioPlayer.setVolume(1.0);
+            await _audioPlayer
+                .play(AssetSource('sounds/alarm_ringtone_sos.mp3'));
+          } catch (_) {}
+          _repeatTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+            final stillPending =
+                _activeAlerts.any((a) => a.status == SosStatus.pending);
+            if (!stillPending) {
+              _stopRinging();
+              return;
+            }
+            HapticFeedback.heavyImpact();
+          });
+        } else if (!hasPending) {
+          _stopRinging();
+        }
+      },
+      onError: (e) {
+        debugPrint('[SosStream] error: $e');
+      },
+    );
   }
 
   void _stopRinging() {
@@ -151,11 +218,112 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
     _audioPlayer.stop();
   }
 
+  // ── Stream bantuan non-SOS ─────────────────────────────────────────────────
+  void _startListeningBantuan() {
+    _bantuanSub = BantuanService.watchActiveRequests().listen(
+      (list) async {
+        // setState dulu agar kartu muncul, BARU mainkan suara
+        if (mounted) setState(() => _activeBantuan = list);
+
+        for (final req in list) {
+          if (!_notifiedBantuanIds.contains(req.id)) {
+            _notifiedBantuanIds.add(req.id);
+            HapticFeedback.mediumImpact();
+            // Bungkus audio dalam try-catch agar tidak menghentikan alur
+            try {
+              await _bantuanPlayer.setReleaseMode(ReleaseMode.release);
+              await _bantuanPlayer.setVolume(1.0);
+              await _bantuanPlayer
+                  .play(AssetSource('sounds/notification.mp3'));
+            } catch (_) {
+              // Audio gagal tidak boleh memblokir update UI
+            }
+          }
+        }
+      },
+      onError: (e) {
+        // Tangkap error Firestore (misal rules belum diset)
+        debugPrint('[BantuanStream] error: $e');
+      },
+    );
+  }
+
+  // ── Stream patroli aktif (semua satpam) ──────────────────────────────────
+  void _startListeningPatroli() {
+    _patroliSub = FirebaseFirestore.instance
+        .collection('patroli')
+        .where('status', isEqualTo: 'AKTIF')
+        .snapshots()
+        .listen(
+          (snap) {
+            if (mounted) setState(() => _activePatrols = snap.docs.length);
+          },
+          onError: (e) => debugPrint('[PatroliStream] error: $e'),
+        );
+  }
+
+  // ── Stream insiden aktif (status == 'BARU') ──────────────────────────────
+  void _startListeningInsiden() {
+    _insidenSub = FirebaseFirestore.instance
+        .collection('insiden')
+        .where('status', isEqualTo: 'BARU')
+        .snapshots()
+        .listen(
+          (snap) {
+            if (mounted) setState(() => _insidenAktif = snap.docs.length);
+          },
+          onError: (e) => debugPrint('[InsidenStream] error: $e'),
+        );
+  }
+
+  // ── Stream tamu hari ini dari catatantamu ────────────────────────────────
+  void _startListeningTamu() {
+    final now   = DateTime.now();
+    final start = DateTime(now.year, now.month, now.day);
+    final end   = start.add(const Duration(days: 1));
+
+    _tamuSub = FirebaseFirestore.instance
+        .collection('catatantamu')
+        .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+        .where('createdAt', isLessThan: Timestamp.fromDate(end))
+        .snapshots()
+        .listen(
+          (snap) {
+            if (mounted) setState(() => _tamuHariIni = snap.docs.length);
+          },
+          onError: (e) => debugPrint('[TamuStream] error: $e'),
+        );
+  }
+
+  Future<void> _onBantuanOnMyWay(BantuanRequest req) async {
+    HapticFeedback.mediumImpact();
+    await _bantuanPlayer.stop();
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    await BantuanService.updateStatus(
+      requestId: req.id,
+      status: BantuanStatus.onMyWay,
+      respondedBy: uid,
+    );
+  }
+
+  Future<void> _onBantuanResolved(BantuanRequest req) async {
+    HapticFeedback.mediumImpact();
+    await BantuanService.updateStatus(
+      requestId: req.id,
+      status: BantuanStatus.resolved,
+    );
+  }
+
   @override
   void dispose() {
     _alertSub?.cancel();
+    _bantuanSub?.cancel();
+    _patroliSub?.cancel();
+    _insidenSub?.cancel();
+    _tamuSub?.cancel();
     _stopRinging();
     _audioPlayer.dispose();
+    _bantuanPlayer.dispose();
     super.dispose();
   }
 
@@ -212,8 +380,12 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
                     children: [
                       // ── Top Bar ─────────────────────────────────────
                       _TopBar(
-                        namaUser: namaUser,
-                        photoUrl: AuthRepository.currentUser?.photoUrl,
+                        namaUser  : namaUser,
+                        photoUrl  : AuthRepository.currentUser?.photoUrl,
+                        isOnDuty  : _isOnDuty,
+                        isLoading : _loadingDuty,
+                        isSaving  : _savingDuty,
+                        onToggle  : _toggleDuty,
                       ),
 
                       const SizedBox(height: 16),
@@ -235,12 +407,21 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
                         const SizedBox(height: 4),
                       ],
 
+                      // ── Laporan Warga Card ────────────────────────────
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                        child: _LaporanWargaCard(
+                          count: _activeBantuan.length,
+                          onTap: () => Navigator.pushNamed(
+                              context, AppRouter.satpamLaporan),
+                        ),
+                      ),
+
                       // ── Stats Grid ───────────────────────────────────
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20),
                         child: _StatsGrid(
                           activePatrols: _activePatrols,
-                          pendingReports: _pendingReports,
                           tamuHariIni: _tamuHariIni,
                           insidenAktif: _insidenAktif,
                         ),
@@ -284,7 +465,7 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
               bottom: 0,
               left: 0,
               right: 0,
-              child: _SatpamBottomNav(currentIndex: 0),
+              child: SatpamBottomNav(currentIndex: 0),
             ),
           ],
         ),
@@ -297,23 +478,38 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
 // Top Bar
 // ─────────────────────────────────────────────────────────────────────────────
 class _TopBar extends StatelessWidget {
-  const _TopBar({required this.namaUser, this.photoUrl});
-  final String namaUser;
-  final String? photoUrl;
+  const _TopBar({
+    required this.namaUser,
+    this.photoUrl,
+    required this.isOnDuty,
+    required this.isLoading,
+    required this.isSaving,
+    required this.onToggle,
+  });
+
+  final String             namaUser;
+  final String?            photoUrl;
+  final bool               isOnDuty;
+  final bool               isLoading;
+  final bool               isSaving;
+  final ValueChanged<bool> onToggle;
 
   @override
   Widget build(BuildContext context) {
+    const activeColor   = Color(0xFF16A34A);
+    const inactiveColor = Color(0xFF94A3B8);
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       child: Row(
         children: [
+          // Avatar
           CircleAvatar(
             radius: 20,
             backgroundColor: AppColors.primary.withOpacity(0.15),
-            backgroundImage:
-                (photoUrl != null && photoUrl!.isNotEmpty)
-                    ? NetworkImage(photoUrl!)
-                    : null,
+            backgroundImage: (photoUrl != null && photoUrl!.isNotEmpty)
+                ? NetworkImage(photoUrl!)
+                : null,
             child: (photoUrl == null || photoUrl!.isEmpty)
                 ? Text(
                     namaUser.isNotEmpty ? namaUser[0].toUpperCase() : '?',
@@ -326,15 +522,14 @@ class _TopBar extends StatelessWidget {
                 : null,
           ),
           const SizedBox(width: 10),
+          // Nama
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 'Selamat bertugas,',
                 style: GoogleFonts.inter(
-                  fontSize: 12,
-                  color: const Color(0xFF94A3B8),
-                ),
+                    fontSize: 12, color: const Color(0xFF94A3B8)),
               ),
               Text(
                 namaUser,
@@ -347,43 +542,65 @@ class _TopBar extends StatelessWidget {
             ],
           ),
           const Spacer(),
-          Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.06),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
+          // Status bertugas — kompak di kanan
+          if (isLoading)
+            const SizedBox(
+              width: 24, height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: isOnDuty
+                    ? activeColor.withOpacity(0.1)
+                    : const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: isOnDuty
+                      ? activeColor.withOpacity(0.35)
+                      : const Color(0xFFE2E8F0),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Dot
+                  Container(
+                    width: 7, height: 7,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isOnDuty ? activeColor : inactiveColor,
                     ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.notifications_outlined,
-                  size: 20,
-                  color: Color(0xFF0D1B2A),
-                ),
-              ),
-              Positioned(
-                top: 6,
-                right: 6,
-                child: Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: Colors.red,
-                    shape: BoxShape.circle,
                   ),
-                ),
+                  const SizedBox(width: 6),
+                  Text(
+                    isOnDuty ? 'Bertugas' : 'Off Duty',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: isOnDuty ? activeColor : inactiveColor,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  SizedBox(
+                    height: 24,
+                    child: Transform.scale(
+                      scale: 0.75,
+                      child: Switch(
+                        value            : isOnDuty,
+                        onChanged        : isSaving ? null : onToggle,
+                        activeColor      : activeColor,
+                        activeTrackColor : activeColor.withOpacity(0.3),
+                        inactiveThumbColor : inactiveColor,
+                        inactiveTrackColor : inactiveColor.withOpacity(0.2),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
         ],
       ),
     );
@@ -595,17 +812,314 @@ class _ActionButton extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Bantuan Request Card — warna oranye, beda dari SOS merah/biru
+// ─────────────────────────────────────────────────────────────────────────────
+class _BantuanRequestCard extends StatelessWidget {
+  const _BantuanRequestCard({
+    required this.request,
+    this.onOnMyWay,
+    this.onResolved,
+  });
+  final BantuanRequest request;
+  final VoidCallback? onOnMyWay;
+  final VoidCallback? onResolved;
+
+  static const _gradientColors = [Color(0xFFE65100), Color(0xFFBF360C)];
+  static const _shadowColor = Color(0xFFE65100);
+
+  IconData get _kategoriIcon {
+    switch (request.kategori) {
+      case 'Pendampingan':
+        return Icons.directions_walk_rounded;
+      case 'Kendaraan':
+        return Icons.directions_car_outlined;
+      case 'Orang Mencurigakan':
+        return Icons.remove_red_eye_outlined;
+      case 'Gangguan Lingkungan':
+        return Icons.volume_up_outlined;
+      default:
+        return Icons.support_agent_rounded;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: _gradientColors,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: _shadowColor.withOpacity(0.3),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Header: badge tipe + status ────────────────────────────────
+          Row(
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.25),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(_kategoriIcon, size: 12, color: Colors.white),
+                    const SizedBox(width: 5),
+                    Text(
+                      'BANTUAN WARGA',
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        letterSpacing: 0.6,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  request.status == BantuanStatus.pending
+                      ? 'PENDING'
+                      : 'ON MY WAY',
+                  style: GoogleFonts.inter(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+
+          // ── Info warga + kategori ──────────────────────────────────────
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(_kategoriIcon, color: Colors.white, size: 18),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      request.kategori,
+                      style: GoogleFonts.inter(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    Text(
+                      '${request.namaWarga}  •  Blok ${request.blok} – Unit ${request.nomorUnit}',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        color: Colors.white.withOpacity(0.85),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          // ── Catatan (jika ada) ─────────────────────────────────────────
+          if (request.catatan.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.notes_rounded,
+                      size: 14,
+                      color: Colors.white.withOpacity(0.8)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      request.catatan,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: Colors.white.withOpacity(0.9),
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 16),
+
+          // ── Tombol aksi ────────────────────────────────────────────────
+          if (onOnMyWay != null)
+            _ActionButton(
+              label: 'ON MY WAY',
+              icon: Icons.directions_walk_rounded,
+              color: const Color(0xFFE65100),
+              onTap: onOnMyWay!,
+            ),
+
+          if (onResolved != null)
+            _ActionButton(
+              label: 'SELESAI / RESOLVED',
+              icon: Icons.check_circle_outline_rounded,
+              color: const Color(0xFF2E7D32),
+              onTap: onResolved!,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Laporan Warga Card — single card dengan badge count, tap → SatpamLaporanPage
+// ─────────────────────────────────────────────────────────────────────────────
+class _LaporanWargaCard extends StatelessWidget {
+  const _LaporanWargaCard({required this.count, required this.onTap});
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFFE65100), Color(0xFFBF360C)],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFE65100).withOpacity(0.3),
+              blurRadius: 14,
+              offset: const Offset(0, 5),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.support_agent_rounded,
+                color: Colors.white,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Laporan Warga',
+                    style: GoogleFonts.inter(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    count > 0
+                        ? '$count laporan menunggu tindakan'
+                        : 'Tidak ada laporan aktif',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      color: Colors.white.withOpacity(0.85),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Badge count
+            if (count > 0)
+              Container(
+                margin: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '$count',
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFFE65100),
+                  ),
+                ),
+              ),
+            const Icon(Icons.arrow_forward_ios_rounded,
+                color: Colors.white, size: 16),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Stats Grid: 2x2
 // ─────────────────────────────────────────────────────────────────────────────
 class _StatsGrid extends StatelessWidget {
   const _StatsGrid({
     required this.activePatrols,
-    required this.pendingReports,
     required this.tamuHariIni,
     required this.insidenAktif,
   });
   final int activePatrols;
-  final int pendingReports;
   final int tamuHariIni;
   final int insidenAktif;
 
@@ -613,6 +1127,7 @@ class _StatsGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
+        // Row 1: Patroli + Tamu
         Row(
           children: [
             Expanded(
@@ -629,22 +1144,6 @@ class _StatsGrid extends StatelessWidget {
             const SizedBox(width: 14),
             Expanded(
               child: _StatCard(
-                icon: Icons.inbox_outlined,
-                iconColor: const Color(0xFFE65100),
-                iconBg: const Color(0xFFFFF3E0),
-                label: 'LAPORAN PENDING',
-                value: '$pendingReports',
-                valueLabel: 'Item',
-                valueColor: const Color(0xFF0D1B2A),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 14),
-        Row(
-          children: [
-            Expanded(
-              child: _StatCard(
                 icon: Icons.people_outline,
                 iconColor: const Color(0xFF512DA8),
                 iconBg: const Color(0xFFEDE7F6),
@@ -654,21 +1153,20 @@ class _StatsGrid extends StatelessWidget {
                 valueColor: const Color(0xFF0D1B2A),
               ),
             ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: _StatCard(
-                icon: Icons.warning_amber_rounded,
-                iconColor: const Color(0xFFD32F2F),
-                iconBg: const Color(0xFFFFEBEE),
-                label: 'INSIDEN AKTIF',
-                value: '$insidenAktif',
-                valueLabel: 'Kasus',
-                valueColor: insidenAktif > 0
-                    ? const Color(0xFFD32F2F)
-                    : const Color(0xFF2E7D32),
-              ),
-            ),
           ],
+        ),
+        const SizedBox(height: 14),
+        // Row 2: Insiden full-width
+        _StatCard(
+          icon: Icons.warning_amber_rounded,
+          iconColor: const Color(0xFFD32F2F),
+          iconBg: const Color(0xFFFFEBEE),
+          label: 'INSIDEN AKTIF',
+          value: '$insidenAktif',
+          valueLabel: 'Kasus',
+          valueColor: insidenAktif > 0
+              ? const Color(0xFFD32F2F)
+              : const Color(0xFF2E7D32),
         ),
       ],
     );
@@ -822,7 +1320,7 @@ class _QuickActions extends StatelessWidget {
                   const SizedBox(height: 10),
                   _QuickActionSecondary(
                     icon: Icons.report_problem_outlined,
-                    label: 'Laporkan Insiden',
+                    label: 'Lapor Insiden',
                     iconBg: const Color(0xFFFFEBEE),
                     iconColor: const Color(0xFFD32F2F),
                     onTap: onLaporInsiden,
@@ -1141,76 +1639,6 @@ class _AktivitasTile extends StatelessWidget {
             color: Colors.grey.shade100,
           ),
       ],
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Bottom Nav Bar
-// ─────────────────────────────────────────────────────────────────────────────
-class _SatpamBottomNav extends StatelessWidget {
-  const _SatpamBottomNav({required this.currentIndex});
-  final int currentIndex;
-
-  static const _items = [
-    (icon: Icons.home_filled,    label: 'Home',    route: AppRouter.satpamHome),
-    (icon: Icons.route_outlined, label: 'Patroli', route: AppRouter.satpamPatroli),
-    (icon: Icons.inbox_outlined, label: 'Laporan', route: AppRouter.satpamReports),
-    (icon: Icons.person_outline, label: 'Profil',  route: AppRouter.profil),
-  ];
-
-  void _onTap(BuildContext context, int index) {
-    if (index == currentIndex) return;
-    final route = _items[index].route;
-    if (route.isEmpty) return;
-    Navigator.pushNamed(context, route);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: Colors.grey.shade200)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 12,
-            offset: const Offset(0, -4),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: List.generate(_items.length, (i) {
-              final isActive = i == currentIndex;
-              final color = isActive ? AppColors.primary : const Color(0xFFB0BEC5);
-              return GestureDetector(
-                onTap: () => _onTap(context, i),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(_items[i].icon, color: color, size: 24),
-                    const SizedBox(height: 4),
-                    Text(
-                      _items[i].label,
-                      style: GoogleFonts.inter(
-                        fontSize: 10,
-                        fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-                        color: color,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }),
-          ),
-        ),
-      ),
     );
   }
 }
