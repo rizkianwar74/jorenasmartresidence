@@ -12,6 +12,7 @@ enum AdminPage {
   wargaUser,
   security,
   insiden,
+  daftarTamu,
   facilities,
   billing,
   reports,
@@ -61,6 +62,12 @@ const _mainNavItems = [
     icon: Icons.warning_amber_outlined,
     label: 'Insiden',
     route: AppRouter.adminInsiden,
+  ),
+  _NavItemData(
+    page: AdminPage.daftarTamu,
+    icon: Icons.badge_outlined,
+    label: 'Daftar Tamu',
+    route: AppRouter.adminDaftarTamu,
   ),
   _NavItemData(
     page: AdminPage.facilities,
