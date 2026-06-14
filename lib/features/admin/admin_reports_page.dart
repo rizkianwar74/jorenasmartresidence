@@ -658,115 +658,117 @@ class _DetailPanelState extends State<_DetailPanel> {
     final tgl = DateFormat('dd MMMM yyyy, HH:mm', 'id_ID').format(r.createdAt);
     return Padding(
       padding: const EdgeInsets.all(24),
-      child: Column(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
-          Row(children: [
-            Expanded(child: Text(r.judul,
-                style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.textDark))),
-            const SizedBox(width: 12),
-            _StatusBadgeRow(r.status),
-          ]),
-          const SizedBox(height: 12),
-
-          // Info
-          _Row('Pelapor', '${r.namaWarga} — Blok ${r.blok} – Unit ${r.nomorUnit}'),
-          _Row('Kategori', r.kategori),
-          _Row('Tanggal', tgl),
-          if (r.assignedName != null)
-            _Row('Ditugaskan ke', r.assignedName!, valueColor: AppColors.primary),
-
-          const SizedBox(height: 10),
-          Divider(color: Colors.grey.shade100),
-          const SizedBox(height: 10),
-
-          // Deskripsi
-          Text('Deskripsi', style: GoogleFonts.inter(
-              fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textGrey)),
-          const SizedBox(height: 6),
-          Text(r.deskripsi, style: GoogleFonts.inter(
-              fontSize: 13, color: AppColors.textDark, height: 1.6)),
-
-          // Admin note
-          if (r.adminNote != null && r.adminNote!.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.primary.withOpacity(0.15)),
-              ),
-              child: Text(r.adminNote!,
-                  style: GoogleFonts.inter(fontSize: 13, color: AppColors.primary, height: 1.5)),
-            ),
-          ],
-
-          const SizedBox(height: 20),
-
-          // ── Action buttons ──────────────────────────────────────────
-          if (_assigning)
-            const Center(child: CircularProgressIndicator(strokeWidth: 2))
-          else
-            Wrap(
-              spacing: 10,
-              runSpacing: 8,
+          // ── Kiri: info + action buttons ─────────────────────────────
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Tugaskan Satpam — tampil jika belum diproses/selesai
-                if (r.status == StatusKeluhan.menunggu ||
-                    r.status == StatusKeluhan.diproses)
-                  ElevatedButton.icon(
-                    onPressed: () => _showAssignDialog(r),
-                    icon: const Icon(Icons.person_add_outlined,
-                        size: 16, color: Colors.white),
-                    label: Text(
-                      r.assignedName == null
-                          ? 'Tugaskan Satpam'
-                          : 'Ganti Satpam',
-                      style: GoogleFonts.inter(
-                          fontSize: 12, fontWeight: FontWeight.w600,
-                          color: Colors.white),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary, elevation: 0,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
+                // Header
+                Row(children: [
+                  Expanded(child: Text(r.judul,
+                      style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.textDark))),
+                  const SizedBox(width: 12),
+                  _StatusBadgeRow(r.status),
+                ]),
+                const SizedBox(height: 12),
 
-                // Tandai Selesai
-                if (r.status == StatusKeluhan.diproses)
-                  ElevatedButton.icon(
-                    onPressed: () => _updateStatus(r, StatusKeluhan.selesai),
-                    icon: const Icon(Icons.check_circle_outline,
-                        size: 16, color: Colors.white),
-                    label: Text('Selesai',
-                        style: GoogleFonts.inter(fontSize: 12,
-                            fontWeight: FontWeight.w600, color: Colors.white)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF2E7D32), elevation: 0,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
+                // Info
+                _Row('Pelapor', '${r.namaWarga} — Blok ${r.blok} – Unit ${r.nomorUnit}'),
+                _Row('Kategori', r.kategori),
+                _Row('Tanggal', tgl),
+                if (r.assignedName != null)
+                  _Row('Ditugaskan ke', r.assignedName!, valueColor: AppColors.primary),
 
-                // Tolak
-                if (r.status == StatusKeluhan.menunggu)
-                  OutlinedButton.icon(
-                    onPressed: () => _updateStatus(r, StatusKeluhan.ditolak),
-                    icon: Icon(Icons.cancel_outlined,
-                        size: 16, color: Colors.red.shade400),
-                    label: Text('Tolak',
-                        style: GoogleFonts.inter(fontSize: 12, color: Colors.red.shade400)),
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: Colors.red.shade200),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                const SizedBox(height: 10),
+                Divider(color: Colors.grey.shade100),
+                const SizedBox(height: 10),
+
+                // Deskripsi
+                Text('Deskripsi', style: GoogleFonts.inter(
+                    fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textGrey)),
+                const SizedBox(height: 6),
+                Text(r.deskripsi, style: GoogleFonts.inter(
+                    fontSize: 13, color: AppColors.textDark, height: 1.6)),
+
+                // Admin note
+                if (r.adminNote != null && r.adminNote!.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.primary.withOpacity(0.15)),
                     ),
+                    child: Text(r.adminNote!,
+                        style: GoogleFonts.inter(fontSize: 13, color: AppColors.primary, height: 1.5)),
+                  ),
+                ],
+
+                const SizedBox(height: 20),
+
+                // Action buttons
+                if (_assigning)
+                  const CircularProgressIndicator(strokeWidth: 2)
+                else
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 8,
+                    children: [
+                      if (r.status == StatusKeluhan.menunggu ||
+                          r.status == StatusKeluhan.diproses)
+                        ElevatedButton.icon(
+                          onPressed: () => _showAssignDialog(r),
+                          icon: const Icon(Icons.person_add_outlined, size: 16, color: Colors.white),
+                          label: Text(
+                            r.assignedName == null ? 'Tugaskan Satpam' : 'Ganti Satpam',
+                            style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary, elevation: 0,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                      if (r.status == StatusKeluhan.diproses)
+                        ElevatedButton.icon(
+                          onPressed: () => _updateStatus(r, StatusKeluhan.selesai),
+                          icon: const Icon(Icons.check_circle_outline, size: 16, color: Colors.white),
+                          label: Text('Selesai',
+                              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF2E7D32), elevation: 0,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                      if (r.status == StatusKeluhan.menunggu)
+                        OutlinedButton.icon(
+                          onPressed: () => _updateStatus(r, StatusKeluhan.ditolak),
+                          icon: Icon(Icons.cancel_outlined, size: 16, color: Colors.red.shade400),
+                          label: Text('Tolak',
+                              style: GoogleFonts.inter(fontSize: 12, color: Colors.red.shade400)),
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: Colors.red.shade200),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                    ],
                   ),
               ],
             ),
+          ),
+
+          // ── Kanan: foto ──────────────────────────────────────────────
+          const SizedBox(width: 24),
+          SizedBox(
+            width: 260,
+            child: _FotoPanel(fotoUrls: r.fotoUrls),
+          ),
         ],
       ),
     );
@@ -783,6 +785,277 @@ class _DetailPanelState extends State<_DetailPanel> {
                 color: valueColor ?? AppColors.textDark,
                 fontWeight: valueColor != null ? FontWeight.w600 : FontWeight.normal))),
       ]),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Panel foto (kanan detail)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _FotoPanel extends StatelessWidget {
+  const _FotoPanel({required this.fotoUrls});
+  final List<String> fotoUrls;
+
+  void _openFullscreen(BuildContext context, String url, int index, List<String> all) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (_) => _FotoFullscreen(urls: all, initialIndex: index),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          Icon(Icons.photo_library_outlined, size: 14, color: AppColors.textGrey),
+          const SizedBox(width: 6),
+          Text(
+            'Foto Lampiran (${fotoUrls.length})',
+            style: GoogleFonts.inter(
+                fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textGrey),
+          ),
+        ]),
+        const SizedBox(height: 10),
+
+        if (fotoUrls.isEmpty)
+          Container(
+            height: 120,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.image_not_supported_outlined,
+                      size: 28, color: Colors.grey.shade400),
+                  const SizedBox(height: 6),
+                  Text('Tidak ada foto',
+                      style: GoogleFonts.inter(
+                          fontSize: 12, color: AppColors.textGrey)),
+                ],
+              ),
+            ),
+          )
+        else
+          ...fotoUrls.asMap().entries.map((entry) {
+            final i   = entry.key;
+            final url = entry.value;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: GestureDetector(
+                onTap: () => _openFullscreen(context, url, i, fotoUrls),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Stack(
+                    children: [
+                      Image.network(
+                        url,
+                        width: double.infinity,
+                        height: 160,
+                        fit: BoxFit.cover,
+                        loadingBuilder: (_, child, progress) {
+                          if (progress == null) return child;
+                          return Container(
+                            width: double.infinity,
+                            height: 160,
+                            color: Colors.grey.shade100,
+                            child: Center(
+                              child: CircularProgressIndicator(
+                                value: progress.expectedTotalBytes != null
+                                    ? progress.cumulativeBytesLoaded /
+                                        progress.expectedTotalBytes!
+                                    : null,
+                                strokeWidth: 2,
+                              ),
+                            ),
+                          );
+                        },
+                        errorBuilder: (_, __, ___) => Container(
+                          width: double.infinity,
+                          height: 160,
+                          color: Colors.grey.shade100,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.broken_image_outlined,
+                                  size: 28, color: Colors.grey.shade400),
+                              const SizedBox(height: 4),
+                              Text('Gagal memuat',
+                                  style: GoogleFonts.inter(
+                                      fontSize: 11, color: AppColors.textGrey)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      // Overlay: zoom icon
+                      Positioned(
+                        bottom: 8,
+                        right: 8,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Icon(Icons.zoom_in,
+                              size: 16, color: Colors.white),
+                        ),
+                      ),
+                      // Label nomor jika lebih dari 1
+                      if (fotoUrls.length > 1)
+                        Positioned(
+                          top: 8,
+                          left: 8,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.black54,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '${i + 1} / ${fotoUrls.length}',
+                              style: GoogleFonts.inter(
+                                  fontSize: 10,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fullscreen viewer
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _FotoFullscreen extends StatefulWidget {
+  const _FotoFullscreen({required this.urls, required this.initialIndex});
+  final List<String> urls;
+  final int initialIndex;
+
+  @override
+  State<_FotoFullscreen> createState() => _FotoFullscreenState();
+}
+
+class _FotoFullscreenState extends State<_FotoFullscreen> {
+  late int _current;
+
+  @override
+  void initState() {
+    super.initState();
+    _current = widget.initialIndex;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Close + counter
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              if (widget.urls.length > 1)
+                Text(
+                  '${_current + 1} / ${widget.urls.length}',
+                  style: GoogleFonts.inter(color: Colors.white, fontSize: 13),
+                )
+              else
+                const SizedBox(),
+              GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.close, color: Colors.white, size: 20),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Image
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.network(
+              widget.urls[_current],
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => Container(
+                height: 200,
+                color: Colors.grey.shade800,
+                child: const Icon(Icons.broken_image_outlined,
+                    color: Colors.white54, size: 48),
+              ),
+            ),
+          ),
+
+          // Prev / Next
+          if (widget.urls.length > 1) ...[
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _NavBtn(
+                  icon: Icons.arrow_back_ios_new,
+                  enabled: _current > 0,
+                  onTap: () => setState(() => _current--),
+                ),
+                const SizedBox(width: 16),
+                _NavBtn(
+                  icon: Icons.arrow_forward_ios,
+                  enabled: _current < widget.urls.length - 1,
+                  onTap: () => setState(() => _current++),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _NavBtn extends StatelessWidget {
+  const _NavBtn({required this.icon, required this.enabled, required this.onTap});
+  final IconData icon;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: enabled ? Colors.white24 : Colors.white10,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(icon,
+            color: enabled ? Colors.white : Colors.white38, size: 18),
+      ),
     );
   }
 }

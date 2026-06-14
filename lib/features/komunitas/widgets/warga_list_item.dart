@@ -37,14 +37,16 @@ class WargaListItem extends StatelessWidget {
             CircleAvatar(
               radius: 28,
               backgroundColor: AppColors.primary.withOpacity(0.15),
-              backgroundImage: warga.imageUrl != null
-                  ? NetworkImage(warga.imageUrl!)
+              backgroundImage: warga.photoUrl != null
+                  ? NetworkImage(warga.photoUrl!)
                   : null,
-              onBackgroundImageError: (_, __) {},
-              child: warga.imageUrl == null
+              onBackgroundImageError: warga.photoUrl != null
+                  ? (_, __) {}
+                  : null,
+              child: warga.photoUrl == null
                   ? Text(
-                      warga.name.isNotEmpty
-                          ? warga.name[0].toUpperCase()
+                      warga.namaLengkap.isNotEmpty
+                          ? warga.namaLengkap[0].toUpperCase()
                           : '?',
                       style: TextStyle(
                         color: AppColors.primary,
@@ -65,7 +67,7 @@ class WargaListItem extends StatelessWidget {
                     children: [
                       Flexible(
                         child: Text(
-                          warga.name,
+                          warga.namaLengkap,
                           style: GoogleFonts.inter(
                             fontSize: 15,
                             fontWeight: FontWeight.bold,
@@ -74,7 +76,7 @@ class WargaListItem extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      if (warga.role != null) ...[
+                      if (warga.komunitasRole != null) ...[
                         const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -86,7 +88,7 @@ class WargaListItem extends StatelessWidget {
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
-                            warga.role!,
+                            warga.komunitasRole!,
                             style: GoogleFonts.inter(
                               fontSize: 10,
                               fontWeight: FontWeight.bold,
@@ -109,6 +111,13 @@ class WargaListItem extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
+
+            // Arrow
+            Icon(
+              Icons.chevron_right,
+              color: Colors.grey.shade400,
+              size: 20,
             ),
           ],
         ),

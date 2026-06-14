@@ -11,6 +11,7 @@ enum AdminPage {
   dashboard,
   wargaUser,
   security,
+  insiden,
   facilities,
   billing,
   reports,
@@ -54,6 +55,12 @@ const _mainNavItems = [
     icon: Icons.shield_outlined,
     label: 'Security',
     route: AppRouter.adminSecurity,
+  ),
+  _NavItemData(
+    page: AdminPage.insiden,
+    icon: Icons.warning_amber_outlined,
+    label: 'Insiden',
+    route: AppRouter.adminInsiden,
   ),
   _NavItemData(
     page: AdminPage.facilities,

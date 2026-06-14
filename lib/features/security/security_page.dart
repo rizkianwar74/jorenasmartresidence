@@ -16,18 +16,65 @@ class SecurityPage extends StatefulWidget {
   State<SecurityPage> createState() => _SecurityPageState();
 }
 
-// ── Model sederhana untuk satpam bertugas ────────────────────────────────────
+// ── Model satpam bertugas ─────────────────────────────────────────────────────
 class _SatpamInfo {
   final String namaLengkap;
   final String nomorHp;
   _SatpamInfo({required this.namaLengkap, required this.nomorHp});
 }
 
+// ── Model unified aktivitas keamanan ─────────────────────────────────────────
+class _AktivitasFeed {
+  final IconData icon;
+  final Color    iconColor;
+  final Color    iconBg;
+  final String   title;
+  final String   subtitle;
+  final String?  badgeLabel;   // null = tidak ada badge
+  final Color?   badgeColor;
+  final DateTime sortKey;
+
+  const _AktivitasFeed({
+    required this.icon,
+    required this.iconColor,
+    required this.iconBg,
+    required this.title,
+    required this.subtitle,
+    required this.sortKey,
+    this.badgeLabel,
+    this.badgeColor,
+  });
+}
+
 class _SecurityPageState extends State<SecurityPage> {
   bool _isLoading = false;
+
+  // ── Satpam bertugas ───────────────────────────────────────────────────────
   List<_SatpamInfo>? _satpamList;
   bool _satpamLoading = true;
   StreamSubscription<QuerySnapshot>? _satpamSub;
+
+  // ── Aktivitas gabungan ────────────────────────────────────────────────────
+  List<_AktivitasFeed> _patroliItems  = [];
+  List<_AktivitasFeed> _bantuanItems  = [];
+  List<_AktivitasFeed> _insidenItems  = [];
+  List<_AktivitasFeed> _tamuItems     = [];
+  bool _aktivitasLoading = true;
+
+  StreamSubscription<QuerySnapshot>? _patroliSub;
+  StreamSubscription<QuerySnapshot>? _bantuanSub;
+  StreamSubscription<QuerySnapshot>? _insidenSubA;
+  StreamSubscription<QuerySnapshot>? _tamuSubA;
+
+  List<_AktivitasFeed> get _mergedAktivitas {
+    final all = [
+      ..._patroliItems,
+      ..._bantuanItems,
+      ..._insidenItems,
+      ..._tamuItems,
+    ]..sort((a, b) => b.sortKey.compareTo(a.sortKey));
+    return all.take(5).toList();
+  }
 
   static const double _contentMaxWidth = 600.0;
 
@@ -35,23 +82,10 @@ class _SecurityPageState extends State<SecurityPage> {
   void initState() {
     super.initState();
     _loadSatpam();
-  }
-
-  // ── Format Timestamp Firestore → string relatif ─────────────────────────
-  static String _formatTs(dynamic ts) {
-    if (ts == null) return '';
-    DateTime dt;
-    if (ts is Timestamp) {
-      dt = ts.toDate();
-    } else {
-      return '';
-    }
-    final diff = DateTime.now().difference(dt);
-    if (diff.inMinutes < 1)  return 'Baru saja';
-    if (diff.inMinutes < 60) return '${diff.inMinutes} mnt lalu';
-    if (diff.inHours < 24)   return '${diff.inHours} jam lalu';
-    if (diff.inDays == 1)    return 'Kemarin';
-    return '${diff.inDays} hari lalu';
+    _startPatroliStream();
+    _startBantuanStream();
+    _startInsidenStream();
+    _startTamuStream();
   }
 
   void _loadSatpam() {
@@ -78,9 +112,151 @@ class _SecurityPageState extends State<SecurityPage> {
         );
   }
 
+  // ── Helper: Timestamp → DateTime ─────────────────────────────────────────
+  static DateTime _toDateTime(dynamic ts) {
+    if (ts is Timestamp) return ts.toDate();
+    return DateTime.fromMillisecondsSinceEpoch(0);
+  }
+
+  void _checkAktivitasLoaded() {
+    // Tandai loading selesai setelah semua stream pertama kali datang
+    if (_aktivitasLoading && mounted) setState(() => _aktivitasLoading = false);
+  }
+
+  // ── Stream: patroli ───────────────────────────────────────────────────────
+  void _startPatroliStream() {
+    _patroliSub = FirebaseFirestore.instance
+        .collection('patroli')
+        .orderBy('createdAt', descending: true)
+        .limit(10)
+        .snapshots()
+        .listen((snap) {
+      _patroliItems = snap.docs.map((doc) {
+        final d          = doc.data() as Map<String, dynamic>;
+        final status     = d['status'] as String? ?? '';
+        final blok       = d['blokPatroli'] as String? ?? '-';
+        final nama       = d['namaSatpam']  as String? ?? 'Satpam';
+        final jamMulai   = d['jamMulai']    as String? ?? '';
+        final jamSelesai = d['jamSelesai']  as String? ?? '';
+        final isAktif    = status == 'AKTIF';
+        return _AktivitasFeed(
+          icon      : isAktif ? Icons.shield_outlined : Icons.security,
+          iconColor : isAktif ? Colors.orange.shade700 : const Color(0xFF1A4080),
+          iconBg    : isAktif ? Colors.orange.shade50  : const Color(0xFFE3F0FF),
+          title     : isAktif ? 'Patroli Berlangsung · $blok' : 'Patroli Selesai · $blok',
+          subtitle  : isAktif
+              ? 'Mulai $jamMulai · $nama'
+              : (jamSelesai.isNotEmpty ? 'Selesai $jamSelesai · $nama' : nama),
+          badgeLabel: isAktif ? 'AKTIF' : null,
+          badgeColor: Colors.orange.shade700,
+          sortKey   : _toDateTime(d['createdAt']),
+        );
+      }).toList();
+      _checkAktivitasLoaded();
+      if (mounted) setState(() {});
+    }, onError: (e) {
+      debugPrint('[PatroliStream] $e');
+      _checkAktivitasLoaded();
+    });
+  }
+
+  // ── Stream: bantuanrequest ────────────────────────────────────────────────
+  void _startBantuanStream() {
+    _bantuanSub = FirebaseFirestore.instance
+        .collection('bantuanrequest')
+        .orderBy('createdAt', descending: true)
+        .limit(10)
+        .snapshots()
+        .listen((snap) {
+      _bantuanItems = snap.docs.map((doc) {
+        final d       = doc.data() as Map<String, dynamic>;
+        final status  = d['status']    as String? ?? '';
+        final kategori= d['kategori']  as String? ?? 'Bantuan';
+        final nama    = d['namaWarga'] as String? ?? '-';
+        final blok    = d['blok']      as String? ?? '-';
+        final unit    = d['nomorUnit'] as String? ?? '-';
+        final isPending = status == 'PENDING' || status == 'ON_MY_WAY';
+        return _AktivitasFeed(
+          icon      : Icons.support_agent_outlined,
+          iconColor : isPending ? Colors.deepOrange : Colors.teal.shade700,
+          iconBg    : isPending ? const Color(0xFFFFF3E0) : Colors.teal.shade50,
+          title     : 'Bantuan: $kategori',
+          subtitle  : '$nama · Blok $blok No. $unit',
+          badgeLabel: isPending ? status : null,
+          badgeColor: Colors.deepOrange,
+          sortKey   : _toDateTime(d['createdAt']),
+        );
+      }).toList();
+      if (mounted) setState(() {});
+    }, onError: (e) => debugPrint('[BantuanStream] $e'));
+  }
+
+  // ── Stream: insiden ───────────────────────────────────────────────────────
+  void _startInsidenStream() {
+    _insidenSubA = FirebaseFirestore.instance
+        .collection('insiden')
+        .orderBy('createdAt', descending: true)
+        .limit(10)
+        .snapshots()
+        .listen((snap) {
+      _insidenItems = snap.docs.map((doc) {
+        final d       = doc.data() as Map<String, dynamic>;
+        final status  = d['status']     as String? ?? '';
+        final kategori= d['kategori']   as String? ?? 'Insiden';
+        final blok    = d['blok']       as String? ?? '-';
+        final nomor   = d['nomor']      as String? ?? '-';
+        final nama    = d['namaSatpam'] as String? ?? 'Satpam';
+        final isBaru  = status == 'BARU';
+        return _AktivitasFeed(
+          icon      : Icons.warning_amber_rounded,
+          iconColor : isBaru ? Colors.red.shade700 : Colors.grey.shade600,
+          iconBg    : isBaru ? Colors.red.shade50   : Colors.grey.shade100,
+          title     : 'Insiden: $kategori',
+          subtitle  : 'Blok $blok No. $nomor · $nama',
+          badgeLabel: isBaru ? 'BARU' : null,
+          badgeColor: Colors.red.shade700,
+          sortKey   : _toDateTime(d['createdAt']),
+        );
+      }).toList();
+      if (mounted) setState(() {});
+    }, onError: (e) => debugPrint('[InsidenStream] $e'));
+  }
+
+  // ── Stream: catatantamu ───────────────────────────────────────────────────
+  void _startTamuStream() {
+    _tamuSubA = FirebaseFirestore.instance
+        .collection('catatantamu')
+        .orderBy('createdAt', descending: true)
+        .limit(10)
+        .snapshots()
+        .listen((snap) {
+      _tamuItems = snap.docs.map((doc) {
+        final d        = doc.data() as Map<String, dynamic>;
+        final nama     = d['namaTamu']           as String? ?? 'Tamu';
+        final kategori = d['kategoriKunjungan']   as String? ?? '-';
+        final blok     = d['blokTujuan']          as String? ?? '-';
+        final nomor    = d['nomorRumahTujuan']    as String? ?? '-';
+        final satpam   = d['namaSatpam']          as String? ?? 'Satpam';
+        return _AktivitasFeed(
+          icon      : Icons.person_add_outlined,
+          iconColor : const Color(0xFF512DA8),
+          iconBg    : const Color(0xFFEDE7F6),
+          title     : 'Tamu Masuk: $nama',
+          subtitle  : '$kategori · Blok $blok No. $nomor · Dicatat $satpam',
+          sortKey   : _toDateTime(d['createdAt']),
+        );
+      }).toList();
+      if (mounted) setState(() {});
+    }, onError: (e) => debugPrint('[TamuStream] $e'));
+  }
+
   @override
   void dispose() {
     _satpamSub?.cancel();
+    _patroliSub?.cancel();
+    _bantuanSub?.cancel();
+    _insidenSubA?.cancel();
+    _tamuSubA?.cancel();
     super.dispose();
   }
 
@@ -367,85 +543,41 @@ class _SecurityPageState extends State<SecurityPage> {
 
                   const SizedBox(height: 12),
 
-                  StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance
-                        .collection('patroli')
-                        .orderBy('createdAt', descending: true)
-                        .limit(10)
-                        .snapshots(),
-                    builder: (context, snap) {
-                      if (snap.connectionState == ConnectionState.waiting) {
-                        return const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 20),
-                          child: Center(
-                              child: CircularProgressIndicator(strokeWidth: 2)),
-                        );
-                      }
-                      final docs = snap.data?.docs ?? [];
-                      if (docs.isEmpty) {
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 24, vertical: 8),
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(
-                                vertical: 24, horizontal: 16),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(14),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.03),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
+                  if (_aktivitasLoading)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 20),
+                      child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                    )
+                  else if (_mergedAktivitas.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.03),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
                             ),
-                            child: Text(
-                              'Belum ada aktivitas keamanan',
-                              textAlign: TextAlign.center,
-                              style: GoogleFonts.inter(
-                                fontSize: 14,
-                                color: AppColors.textGrey,
-                              ),
-                            ),
-                          ),
-                        );
-                      }
-                      return Column(
-                        children: docs.map((doc) {
-                          final d      = doc.data() as Map<String, dynamic>;
-                          final status = d['status'] as String? ?? '';
-                          final blok   = d['blokPatroli'] as String? ?? '-';
-                          final nama   = d['namaSatpam']  as String? ?? 'Satpam';
-                          final jamMulai   = d['jamMulai']  as String? ?? '';
-                          final jamSelesai = d['jamSelesai'] as String? ?? '';
-                          final ts = d['createdAt'];
-                          final waktu = _formatTs(ts);
-
-                          final bool isAktif = status == 'AKTIF';
-                          final icon = isAktif
-                              ? Icons.shield_outlined
-                              : Icons.security;
-                          final title = isAktif
-                              ? 'Patroli Berlangsung · $blok'
-                              : 'Patroli Selesai · $blok';
-                          final subtitle = isAktif
-                              ? 'Mulai $jamMulai · $nama'
-                              : jamSelesai.isNotEmpty
-                                  ? 'Pukul $jamSelesai · $nama · $waktu'
-                                  : '$nama · $waktu';
-
-                          return _AktivitasItem(
-                            icon    : icon,
-                            title   : title,
-                            subtitle: subtitle,
-                            isAktif : isAktif,
-                          );
-                        }).toList(),
-                      );
-                    },
-                  ),
+                          ],
+                        ),
+                        child: Text(
+                          'Belum ada aktivitas keamanan',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.inter(fontSize: 14, color: AppColors.textGrey),
+                        ),
+                      ),
+                    )
+                  else
+                    Column(
+                      children: _mergedAktivitas
+                          .map((item) => _AktivitasItem(feed: item))
+                          .toList(),
+                    ),
 
                   const SizedBox(height: 40),
                 ],
@@ -460,25 +592,11 @@ class _SecurityPageState extends State<SecurityPage> {
 
 // ── Item aktivitas keamanan ───────────────────────────────────────────────────
 class _AktivitasItem extends StatelessWidget {
-  const _AktivitasItem({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    this.isAktif = false,
-  });
-
-  final IconData icon;
-  final String   title;
-  final String   subtitle;
-  final bool     isAktif;
+  const _AktivitasItem({required this.feed});
+  final _AktivitasFeed feed;
 
   @override
   Widget build(BuildContext context) {
-    final color = isAktif ? Colors.orange.shade700 : AppColors.textGrey;
-    final bg    = isAktif
-        ? Colors.orange.shade50
-        : AppColors.primary.withOpacity(0.07);
-
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 6),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -495,57 +613,64 @@ class _AktivitasItem extends StatelessWidget {
       ),
       child: Row(
         children: [
+          // Icon box
           Container(
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: bg,
+              color: feed.iconBg,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, color: color, size: 20),
+            child: Icon(feed.icon, color: feed.iconColor, size: 20),
           ),
           const SizedBox(width: 14),
+          // Teks
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  title,
+                  feed.title,
                   style: GoogleFonts.inter(
-                    fontSize: 14,
+                    fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: AppColors.textDark,
                   ),
                 ),
-                if (subtitle.isNotEmpty) ...[
+                if (feed.subtitle.isNotEmpty) ...[
                   const SizedBox(height: 3),
                   Text(
-                    subtitle,
+                    feed.subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.inter(
-                        fontSize: 12, color: AppColors.textGrey),
+                        fontSize: 11, color: AppColors.textGrey, height: 1.4),
                   ),
                 ],
               ],
             ),
           ),
-          if (isAktif)
+          // Badge (opsional)
+          if (feed.badgeLabel != null) ...[
+            const SizedBox(width: 8),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
               decoration: BoxDecoration(
-                color: Colors.orange.shade50,
+                color: feed.badgeColor!.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.orange.shade200),
+                border: Border.all(color: feed.badgeColor!.withOpacity(0.3)),
               ),
               child: Text(
-                'AKTIF',
+                feed.badgeLabel!,
                 style: GoogleFonts.inter(
                   fontSize: 9,
                   fontWeight: FontWeight.bold,
-                  color: Colors.orange.shade700,
+                  color: feed.badgeColor,
                   letterSpacing: 0.4,
                 ),
               ),
             ),
+          ],
         ],
       ),
     );

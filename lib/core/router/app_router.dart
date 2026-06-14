@@ -22,6 +22,7 @@ import '../../features/admin/admin_security_page.dart';
 import '../../features/admin/admin_facilities_page.dart';
 import '../../features/admin/admin_reports_page.dart';
 import '../../features/admin/admin_berita_page.dart';
+import '../../features/admin/admin_insiden_page.dart';
 import '../../features/security/satpam_laporan_page.dart';
 
 class AppRouter {
@@ -51,6 +52,7 @@ class AppRouter {
   static const String adminFacilities  = '/admin/facilities';
   static const String adminReports     = '/admin/reports';
   static const String adminBerita      = '/admin/berita';
+  static const String adminInsiden     = '/admin/insiden';
 
   // ── Route generator ───────────────────────────────────────────────
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
@@ -84,6 +86,8 @@ class AppRouter {
         return _fade(const AdminReportsPage(), settings);
       case adminBerita:
         return _fade(const AdminBeritaPage(), settings);
+      case adminInsiden:
+        return _fade(const AdminInsidenPage(), settings);
       case satpamHome:
         return _fade(const SatpamHomePage(), settings);
       case layanan:

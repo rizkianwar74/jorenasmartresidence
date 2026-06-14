@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/utils/responsive_helper.dart';
 import '../../core/router/app_router.dart';
 import '../../shared/widgets/bottom_nav_bar.dart';
 import 'warga_model.dart';
@@ -18,19 +20,73 @@ class KomunitasPage extends StatefulWidget {
 class _KomunitasPageState extends State<KomunitasPage> {
   static const double _contentMaxWidth = 600.0;
 
-  static const _filterOptions = ['Semua', 'Blok A', 'Blok B', 'Blok C'];
+  String _selectedBlok = 'Semua';
+  String _searchQuery  = '';
 
-  String _selectedBlok = 'Blok A';
-  String _searchQuery = '';
+  List<WargaModel> _allWarga = [];
+  bool _loading = true;
+  StreamSubscription<QuerySnapshot>? _sub;
 
+  // ── Filter chips dinamis dari data ────────────────────────────────────────
+  List<String> get _filterOptions {
+    final bloks = _allWarga.map((w) => w.blok).toSet().toList()..sort();
+    return ['Semua', ...bloks];
+  }
+
+  // ── List setelah filter + search ──────────────────────────────────────────
   List<WargaModel> get _filteredList {
-    return mockWargaList.where((w) {
-      final matchBlok = _selectedBlok == 'Semua' || w.blok == _selectedBlok;
+    return _allWarga.where((w) {
+      final matchBlok   = _selectedBlok == 'Semua' || w.blok == _selectedBlok;
       final matchSearch = _searchQuery.isEmpty ||
-          w.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          w.namaLengkap.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           w.nomorUnit.contains(_searchQuery);
       return matchBlok && matchSearch;
     }).toList();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _startListening();
+  }
+
+  void _startListening() {
+    _sub = FirebaseFirestore.instance
+        .collection('users')
+        .where('role', isEqualTo: 'user')
+        .orderBy('blok')
+        .orderBy('nomorUnit')
+        .snapshots()
+        .listen((snap) {
+      if (!mounted) return;
+      setState(() {
+        _allWarga = snap.docs
+            .map((d) => WargaModel.fromFirestore(
+                  d.id,
+                  d.data() as Map<String, dynamic>,
+                ))
+            .toList();
+        _loading = false;
+      });
+    }, onError: (_) {
+      if (mounted) setState(() => _loading = false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    super.dispose();
+  }
+
+  // ── Modal detail warga ────────────────────────────────────────────────────
+  void _showDetailModal(BuildContext context, WargaModel warga) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _WargaDetailSheet(warga: warga),
+    );
   }
 
   @override
@@ -53,25 +109,6 @@ class _KomunitasPageState extends State<KomunitasPage> {
             color: AppColors.textDark,
           ),
         ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.grey.shade200),
-              ),
-              child: const Icon(
-                Icons.notifications_outlined,
-                color: Colors.black87,
-                size: 22,
-              ),
-            ),
-          ),
-        ],
       ),
       body: Stack(
         children: [
@@ -82,7 +119,7 @@ class _KomunitasPageState extends State<KomunitasPage> {
                 children: [
                   const SizedBox(height: 12),
 
-                  // --- Search bar ---
+                  // ── Search bar ─────────────────────────────────────────────
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     child: Container(
@@ -110,9 +147,8 @@ class _KomunitasPageState extends State<KomunitasPage> {
                             size: 20,
                           ),
                           border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(
-                            vertical: 14,
-                          ),
+                          contentPadding:
+                              const EdgeInsets.symmetric(vertical: 14),
                         ),
                       ),
                     ),
@@ -120,58 +156,24 @@ class _KomunitasPageState extends State<KomunitasPage> {
 
                   const SizedBox(height: 16),
 
-                  // --- Filter chips ---
-                  BlokFilterChips(
-                    options: _filterOptions,
-                    selected: _selectedBlok,
-                    onSelected: (v) => setState(() => _selectedBlok = v),
-                  ),
+                  // ── Filter chips ───────────────────────────────────────────
+                  if (!_loading)
+                    BlokFilterChips(
+                      options: _filterOptions,
+                      selected: _selectedBlok,
+                      onSelected: (v) => setState(() => _selectedBlok = v),
+                    ),
 
                   const SizedBox(height: 16),
 
-                  // --- List warga ---
-                  Expanded(
-                    child: _filteredList.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.search_off_rounded,
-                                  size: 48,
-                                  color: Colors.grey.shade300,
-                                ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  'Tidak ada warga ditemukan',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 14,
-                                    color: AppColors.textGrey,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )
-                        : ListView.builder(
-                            padding: const EdgeInsets.only(
-                              top: 4,
-                              bottom: 120,
-                            ),
-                            itemCount: _filteredList.length,
-                            itemBuilder: (_, i) => WargaListItem(
-                              warga: _filteredList[i],
-                              onTap: () {
-                                // TODO: buka profil warga
-                              },
-                            ),
-                          ),
-                  ),
+                  // ── List warga ─────────────────────────────────────────────
+                  Expanded(child: _buildList()),
                 ],
               ),
             ),
           ),
 
-          // --- Bottom nav ---
+          // ── Bottom nav ─────────────────────────────────────────────────────
           Positioned(
             bottom: 0,
             left: 0,
@@ -199,6 +201,249 @@ class _KomunitasPageState extends State<KomunitasPage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildList() {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_filteredList.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.search_off_rounded, size: 48, color: Colors.grey.shade300),
+            const SizedBox(height: 12),
+            Text(
+              'Tidak ada warga ditemukan',
+              style: GoogleFonts.inter(fontSize: 14, color: AppColors.textGrey),
+            ),
+          ],
+        ),
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.only(top: 4, bottom: 120),
+      itemCount: _filteredList.length,
+      itemBuilder: (_, i) => WargaListItem(
+        warga: _filteredList[i],
+        onTap: () => _showDetailModal(context, _filteredList[i]),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Modal Sheet
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _WargaDetailSheet extends StatelessWidget {
+  const _WargaDetailSheet({required this.warga});
+  final WargaModel warga;
+
+  Future<void> _openWhatsApp(BuildContext context) async {
+    final uri = Uri.parse('https://wa.me/${warga.waNumber}');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tidak dapat membuka WhatsApp')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: EdgeInsets.only(
+        top: 20,
+        left: 24,
+        right: 24,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 32,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Handle bar
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // Avatar + nama
+          CircleAvatar(
+            radius: 36,
+            backgroundColor: AppColors.primary.withOpacity(0.15),
+            backgroundImage: warga.photoUrl != null
+                ? NetworkImage(warga.photoUrl!)
+                : null,
+            onBackgroundImageError: warga.photoUrl != null
+                ? (_, __) {}
+                : null,
+            child: warga.photoUrl == null
+                ? Text(
+                    warga.namaLengkap.isNotEmpty
+                        ? warga.namaLengkap[0].toUpperCase()
+                        : '?',
+                    style: TextStyle(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 28,
+                    ),
+                  )
+                : null,
+          ),
+          const SizedBox(height: 12),
+
+          Text(
+            warga.namaLengkap,
+            style: GoogleFonts.inter(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textDark,
+            ),
+            textAlign: TextAlign.center,
+          ),
+
+          if (warga.komunitasRole != null) ...[
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                warga.komunitasRole!,
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primary,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 24),
+
+          // Info rows
+          _InfoRow(
+            icon: Icons.home_outlined,
+            label: 'Alamat',
+            value: warga.unitLabel,
+          ),
+          const SizedBox(height: 12),
+          _InfoRow(
+            icon: Icons.phone_outlined,
+            label: 'No. HP',
+            value: warga.nomorHp,
+          ),
+          const SizedBox(height: 12),
+          _InfoRow(
+            icon: Icons.email_outlined,
+            label: 'Email',
+            value: warga.email,
+          ),
+
+          const SizedBox(height: 28),
+
+          // Tombol WhatsApp
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => _openWhatsApp(context),
+              icon: const Icon(Icons.chat, size: 20),
+              label: Text(
+                'Chat via WhatsApp',
+                style: GoogleFonts.inter(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF25D366), // warna WhatsApp
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                elevation: 0,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Info Row
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _InfoRow extends StatelessWidget {
+  const _InfoRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: AppColors.primary.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: AppColors.primary, size: 20),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  color: AppColors.textGrey,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textDark,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
