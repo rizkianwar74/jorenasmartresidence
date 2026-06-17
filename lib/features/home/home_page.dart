@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/theme/app_colors.dart';
@@ -12,6 +13,8 @@ import '../berita/data/berita_repository.dart';
 import 'data/home_repository.dart';
 import '../berita/berita_detail_page.dart';
 import '../berita/berita_list_page.dart';
+import '../pembayaran/payment_repository.dart';
+import '../pembayaran/tagihan_model.dart';
 import 'widgets/home_header.dart';
 import 'widgets/quick_action_card.dart';
 import 'widgets/news_carousel.dart';
@@ -26,7 +29,6 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   static const double _contentMaxWidth = 600.0;
-  static const bool _sudahLunas = false;
 
   StreamSubscription<BantuanRequest?>? _bantuanSub;
   BantuanRequest? _activeBantuan;
@@ -305,6 +307,7 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final user = AuthRepository.currentUser;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
     final namaDepan = user?.namaLengkap.split(' ').first ?? 'Pengguna';
     final namaLengkap = user?.namaLengkap ?? 'Pengguna';
     final blok = user?.blok ?? '-';
@@ -318,7 +321,26 @@ class _HomePageState extends State<HomePage> {
               constraints: const BoxConstraints(maxWidth: _contentMaxWidth),
               child: SingleChildScrollView(
                 padding: const EdgeInsets.only(bottom: 120),
-                child: Column(
+                child: StreamBuilder<List<TagihanModel>>(
+                  stream: uid == null
+                      ? Stream.value(const <TagihanModel>[])
+                      : PaymentRepository.watchUserTagihan(uid!),
+                  builder: (context, snap) {
+                    final list = snap.data ?? const <TagihanModel>[];
+                    final adaUnpaid =
+                        list.any((t) => t.status != StatusTagihan.lunas);
+                    // Sudah lunas = punya tagihan dan semua lunas.
+                    final sudahLunas = list.isNotEmpty && !adaUnpaid;
+                    final aktif = list.isEmpty
+                        ? null
+                        : (adaUnpaid
+                            ? list.firstWhere(
+                                (t) => t.status != StatusTagihan.lunas)
+                            : list.first);
+                    final jumlahFmt =
+                        aktif?.jumlahFormatted ?? 'Rp 450.000';
+
+                    return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     SizedBox(height: MediaQuery.of(context).padding.top),
@@ -344,13 +366,18 @@ class _HomePageState extends State<HomePage> {
                           horizontal: 24, vertical: 6),
                       child: Row(
                         children: [
+                          // Kartu tagihan — data dari Firestore
                           Expanded(
                             child: TagihanCard(
                               namaPenghuni: namaLengkap,
-                              jumlahTagihan: 'Rp 450.000',
-                              sudahLunas: _sudahLunas,
-                              onBayarTap: () =>
-                                  Navigator.pushNamed(context, AppRouter.tagihan),
+                              jumlahTagihan: jumlahFmt,
+                              sudahLunas: sudahLunas,
+                              onBayarTap: () {
+                                Navigator.pushNamed(
+                                  context,
+                                  AppRouter.tagihan,
+                                );
+                              },
                             ),
                           ),
                           const SizedBox(width: 16),
@@ -413,13 +440,17 @@ class _HomePageState extends State<HomePage> {
                     UnitStatusCard(
                       blockName: blok,
                       unitNumber: nomorUnit,
-                      paymentStatus: PaymentStatus.paid,
+                      paymentStatus: sudahLunas
+                          ? PaymentStatus.paid
+                          : PaymentStatus.unpaid,
                     ),
 
                     const SizedBox(height: 8),
                     _HomeActivitySection(items: _feedItems),
                     const SizedBox(height: 16),
                   ],
+                    );
+                  },
                 ),
               ),
             ),

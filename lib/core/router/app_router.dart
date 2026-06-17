@@ -22,6 +22,7 @@ import '../../features/admin/admin_security_page.dart';
 import '../../features/admin/admin_facilities_page.dart';
 import '../../features/admin/admin_reports_page.dart';
 import '../../features/admin/admin_berita_page.dart';
+import '../../features/admin/admin_billing_page.dart';
 import '../../features/admin/admin_insiden_page.dart';
 import '../../features/admin/admin_daftar_tamu_page.dart';
 import '../../features/security/satpam_laporan_page.dart';
@@ -57,6 +58,7 @@ class AppRouter {
   static const String adminFacilities  = '/admin/facilities';
   static const String adminReports     = '/admin/reports';
   static const String adminBerita      = '/admin/berita';
+  static const String adminBilling     = '/admin/billing';
   static const String adminInsiden     = '/admin/insiden';
   static const String adminDaftarTamu  = '/admin/daftar-tamu';
 
@@ -91,7 +93,9 @@ class AppRouter {
       case adminReports:
         return _fade(const AdminReportsPage(), settings);
       case adminBerita:
-        return _fade(const AdminBeritaPage(), settings);
+        return _fade(const AdminBeritaPage());
+      case adminBilling:
+        return _fade(const AdminBillingPage());
       case adminInsiden:
         return _fade(const AdminInsidenPage(), settings);
       case adminDaftarTamu:

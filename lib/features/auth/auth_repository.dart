@@ -87,6 +87,11 @@ class AuthRepository {
     String newPassword,
   ) async {
     try {
+<static Future<String?> changePassword(
+    String oldPassword,
+    String newPassword,
+  ) async {
+    try {
       final authUser = FirebaseAuth.instance.currentUser;
       if (authUser?.email == null) return 'Sesi tidak valid. Silakan login ulang.';
 

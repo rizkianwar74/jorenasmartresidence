@@ -54,6 +54,64 @@ class _AdminWargaModel {
   }
 }
 
+const _allResidents = [
+  _ResidentData(
+    nama: 'Budi Sudarsono',
+    email: 'budi.s@warga.res',
+    blok: 'Blok A',
+    nomorUnit: '12',
+    role: 'Ketua RT',
+    avatarUrl: 'https://i.pravatar.cc/150?u=budi',
+  ),
+  _ResidentData(
+    nama: 'Siti Aminah',
+    email: 'siti.a@warga.res',
+    blok: 'Blok B',
+    nomorUnit: '04',
+    role: 'Warga',
+  ),
+  _ResidentData(
+    nama: 'Agus Pratama',
+    email: 'agus.p@warga.res',
+    blok: 'Blok A',
+    nomorUnit: '01',
+    role: 'Ketua RW',
+  ),
+  _ResidentData(
+    nama: 'Rian Wijaya',
+    email: 'rian.w@warga.res',
+    blok: 'Blok C',
+    nomorUnit: '22',
+    role: 'Warga',
+  ),
+  _ResidentData(
+    nama: 'Lestari Putri',
+    email: 'lestari.p@warga.res',
+    blok: 'Blok A',
+    nomorUnit: '15',
+    role: 'Warga',
+  ),
+  _ResidentData(
+    nama: 'Dimas Prayoga',
+    email: 'dimas.p@warga.res',
+    blok: 'Blok D',
+    nomorUnit: '07',
+    role: 'Warga',
+  ),
+  _ResidentData(
+    nama: 'Ratna Dewi',
+    email: 'ratna.d@warga.res',
+    blok: 'Blok B',
+    nomorUnit: '11',
+    role: 'Warga',
+  ),
+  _ResidentData(
+    nama: 'Hendra Kusuma',
+    email: 'hendra.k@warga.res',
+    blok: 'Blok E',
+    nomorUnit: '03',
+    role: 'Ketua RT',
+  ),
 const _jabatanOptions = [
   '',
   'KETUA RT',
