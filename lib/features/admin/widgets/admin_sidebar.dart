@@ -11,6 +11,8 @@ enum AdminPage {
   dashboard,
   wargaUser,
   security,
+  insiden,
+  daftarTamu,
   facilities,
   billing,
   reports,
@@ -54,6 +56,18 @@ const _mainNavItems = [
     icon: Icons.shield_outlined,
     label: 'Security',
     route: AppRouter.adminSecurity,
+  ),
+  _NavItemData(
+    page: AdminPage.insiden,
+    icon: Icons.warning_amber_outlined,
+    label: 'Insiden',
+    route: AppRouter.adminInsiden,
+  ),
+  _NavItemData(
+    page: AdminPage.daftarTamu,
+    icon: Icons.badge_outlined,
+    label: 'Daftar Tamu',
+    route: AppRouter.adminDaftarTamu,
   ),
   _NavItemData(
     page: AdminPage.facilities,
@@ -212,7 +226,7 @@ class _NavTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: isActive
-              ? AppColors.primary.withOpacity(0.1)
+              ? AppColors.primary.withValues(alpha: 0.1)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
         ),

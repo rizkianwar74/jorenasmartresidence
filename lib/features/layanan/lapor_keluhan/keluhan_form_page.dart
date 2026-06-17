@@ -1,8 +1,9 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/services/keluhan_service.dart';
 import 'lapor_keluhan_page.dart';
 
 class KeluhanFormPage extends StatefulWidget {
@@ -15,16 +16,16 @@ class KeluhanFormPage extends StatefulWidget {
 }
 
 class _KeluhanFormPageState extends State<KeluhanFormPage> {
-  final _formKey = GlobalKey<FormState>();
-  final _judulController = TextEditingController();
+  final _formKey            = GlobalKey<FormState>();
+  final _judulController    = TextEditingController();
   final _deskripsiController = TextEditingController();
-  final _picker = ImagePicker();
-  final List<XFile> _selectedImages = [];
+  final _picker             = ImagePicker();
+
+  // Uint8List agar kompatibel web & Android (tidak bergantung dart:io)
+  final List<Uint8List> _selectedImages = [];
 
   bool _isLoading = false;
-
   static const _maxImages = 3;
-
 
   @override
   void dispose() {
@@ -33,51 +34,114 @@ class _KeluhanFormPageState extends State<KeluhanFormPage> {
     super.dispose();
   }
 
+  // ── Pilih foto dari galeri ────────────────────────────────────────────────
   Future<void> _pickImage() async {
     if (_selectedImages.length >= _maxImages) return;
     final image = await _picker.pickImage(
       source: ImageSource.gallery,
-      imageQuality: 80,
+      imageQuality: 70,
+      maxWidth: 1024,
+      maxHeight: 1024,
     );
-    if (image != null) setState(() => _selectedImages.add(image));
+    if (image == null) return;
+    final bytes = await image.readAsBytes();
+    setState(() => _selectedImages.add(bytes));
   }
 
   void _removeImage(int index) =>
       setState(() => _selectedImages.removeAt(index));
 
+  // ── Kirim ke Firestore via KeluhanService ─────────────────────────────────
   Future<void> _kirimLaporan() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
-    await Future.delayed(const Duration(milliseconds: 1200));
+
+    final (result, fotoErrors) = await KeluhanService.sendKeluhan(
+      kategori  : widget.category.title,
+      judul     : _judulController.text.trim(),
+      deskripsi : _deskripsiController.text.trim(),
+      fotos     : _selectedImages,
+    );
+
     if (!mounted) return;
     setState(() => _isLoading = false);
 
-    Navigator.pop(context);
-    Navigator.pop(context);
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle, color: Colors.white, size: 18),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'Laporan berhasil dikirim. Tim kami akan segera menindaklanjuti.',
-                style: GoogleFonts.inter(fontSize: 13),
-              ),
-            ),
-          ],
+    if (result == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Gagal mengirim laporan. Coba lagi.',
+            style: GoogleFonts.inter(fontSize: 13),
+          ),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10)),
+          margin: const EdgeInsets.all(16),
         ),
-        backgroundColor: Colors.green.shade600,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        margin: const EdgeInsets.all(16),
-        duration: const Duration(seconds: 4),
-      ),
-    );
+      );
+      return;
+    }
+
+    // Sukses — kembali ke lapor_keluhan_page (2 pop)
+    if (mounted) {
+      Navigator.pop(context);   // keluhan_form_page
+      Navigator.pop(context);   // kembali ke lapor_keluhan_page
+
+      if (fotoErrors.isNotEmpty) {
+        // Laporan terkirim tapi ada foto yang gagal
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.warning_amber_rounded,
+                    color: Colors.white, size: 18),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Laporan terkirim, tapi ${fotoErrors.length} foto gagal diupload. '
+                    'Pastikan koneksi stabil dan coba lagi.',
+                    style: GoogleFonts.inter(fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.orange.shade700,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10)),
+            margin: const EdgeInsets.all(16),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white, size: 18),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Laporan berhasil dikirim. Tim kami akan segera menindaklanjuti.',
+                    style: GoogleFonts.inter(fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.green.shade600,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10)),
+            margin: const EdgeInsets.all(16),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    }
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -112,11 +176,11 @@ class _KeluhanFormPageState extends State<KeluhanFormPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // --- Info kategori ---
+                  // ── Info kategori ───────────────────────────────────────
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.07),
+                      color: AppColors.primary.withValues(alpha: 0.07),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
@@ -140,21 +204,23 @@ class _KeluhanFormPageState extends State<KeluhanFormPage> {
 
                   const SizedBox(height: 24),
 
-                  // --- Judul keluhan ---
+                  // ── Judul keluhan ───────────────────────────────────────
                   _FieldLabel('JUDUL KELUHAN'),
                   const SizedBox(height: 8),
                   TextFormField(
                     controller: _judulController,
                     style: _inputTextStyle(),
-                    decoration: _inputDecoration(hint: 'Ringkasan singkat masalah Anda'),
-                    validator: (v) => (v == null || v.trim().isEmpty)
-                        ? 'Judul tidak boleh kosong'
-                        : null,
+                    decoration:
+                        _inputDecoration(hint: 'Ringkasan singkat masalah Anda'),
+                    validator: (v) =>
+                        (v == null || v.trim().isEmpty)
+                            ? 'Judul tidak boleh kosong'
+                            : null,
                   ),
 
                   const SizedBox(height: 20),
 
-                  // --- Deskripsi ---
+                  // ── Deskripsi ───────────────────────────────────────────
                   _FieldLabel('DESKRIPSI'),
                   const SizedBox(height: 8),
                   TextFormField(
@@ -163,18 +229,16 @@ class _KeluhanFormPageState extends State<KeluhanFormPage> {
                     maxLength: 300,
                     style: _inputTextStyle(),
                     decoration: _inputDecoration(
-                      hint: 'Jelaskan masalah secara detail...',
-                    ),
-                    validator: (v) => (v == null || v.trim().isEmpty)
-                        ? 'Deskripsi tidak boleh kosong'
-                        : null,
+                        hint: 'Jelaskan masalah secara detail...'),
+                    validator: (v) =>
+                        (v == null || v.trim().isEmpty)
+                            ? 'Deskripsi tidak boleh kosong'
+                            : null,
                   ),
-
-
 
                   const SizedBox(height: 20),
 
-                  // --- Foto bukti ---
+                  // ── Foto bukti ──────────────────────────────────────────
                   _FieldLabel('FOTO BUKTI (OPSIONAL)'),
                   const SizedBox(height: 8),
                   SizedBox(
@@ -193,7 +257,7 @@ class _KeluhanFormPageState extends State<KeluhanFormPage> {
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
-                                  color: AppColors.primary.withOpacity(0.4),
+                                  color: AppColors.primary.withValues(alpha: 0.4),
                                   width: 1.5,
                                 ),
                               ),
@@ -216,9 +280,7 @@ class _KeluhanFormPageState extends State<KeluhanFormPage> {
                               ),
                             ),
                           ),
-                        ..._selectedImages.asMap().entries.map((entry) {
-                          final i = entry.key;
-                          final img = entry.value;
+                        ..._selectedImages.asMap().entries.map((e) {
                           return Stack(
                             children: [
                               Container(
@@ -228,7 +290,7 @@ class _KeluhanFormPageState extends State<KeluhanFormPage> {
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(12),
                                   image: DecorationImage(
-                                    image: FileImage(File(img.path)),
+                                    image: MemoryImage(e.value),
                                     fit: BoxFit.cover,
                                   ),
                                 ),
@@ -237,7 +299,7 @@ class _KeluhanFormPageState extends State<KeluhanFormPage> {
                                 top: 4,
                                 right: 14,
                                 child: GestureDetector(
-                                  onTap: () => _removeImage(i),
+                                  onTap: () => _removeImage(e.key),
                                   child: Container(
                                     width: 22,
                                     height: 22,
@@ -265,7 +327,7 @@ class _KeluhanFormPageState extends State<KeluhanFormPage> {
 
                   const SizedBox(height: 32),
 
-                  // --- Tombol kirim ---
+                  // ── Tombol kirim ────────────────────────────────────────
                   SizedBox(
                     width: double.infinity,
                     height: 52,
@@ -276,10 +338,9 @@ class _KeluhanFormPageState extends State<KeluhanFormPage> {
                         foregroundColor: Colors.white,
                         elevation: 0,
                         disabledBackgroundColor:
-                            AppColors.primary.withOpacity(0.5),
+                            AppColors.primary.withValues(alpha: 0.5),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
+                            borderRadius: BorderRadius.circular(14)),
                       ),
                       child: _isLoading
                           ? const SizedBox(
@@ -315,16 +376,14 @@ class _KeluhanFormPageState extends State<KeluhanFormPage> {
     );
   }
 
-  Widget _FieldLabel(String label) => Padding(
-        padding: const EdgeInsets.only(bottom: 0),
-        child: Text(
-          label,
-          style: GoogleFonts.inter(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: AppColors.textGrey,
-            letterSpacing: 0.8,
-          ),
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  Widget _FieldLabel(String text) => Text(
+        text,
+        style: GoogleFonts.inter(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: AppColors.textGrey,
+          letterSpacing: 0.8,
         ),
       );
 
@@ -333,7 +392,8 @@ class _KeluhanFormPageState extends State<KeluhanFormPage> {
 
   InputDecoration _inputDecoration({required String hint}) => InputDecoration(
         hintText: hint,
-        hintStyle: GoogleFonts.inter(fontSize: 14, color: AppColors.textGrey),
+        hintStyle:
+            GoogleFonts.inter(fontSize: 14, color: AppColors.textGrey),
         filled: true,
         fillColor: Colors.white,
         contentPadding:
@@ -348,7 +408,8 @@ class _KeluhanFormPageState extends State<KeluhanFormPage> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+          borderSide:
+              const BorderSide(color: AppColors.primary, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),

@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import '../../features/splash/splash_screen.dart';
 import '../../features/auth/login_page.dart';
 import '../../features/auth/register_page.dart';
+import '../../features/auth/forgot_password_page.dart';
 import '../../features/auth/auth_repository.dart';
 import '../../features/home/home_page.dart';
 import '../../features/home/satpam_home_page.dart';
 import '../../features/layanan/layanan_page.dart';
 import '../../features/komunitas/komunitas_page.dart';
 import '../../features/profile/profil_page.dart';
+import '../../features/profile/pengaturan_page.dart';
 import '../../features/security/security_page.dart';
 import '../../features/security/bantuan/bantuan_satpam_page.dart';
 import '../../features/security/satpam_patroli_page.dart';
@@ -21,6 +23,11 @@ import '../../features/admin/admin_facilities_page.dart';
 import '../../features/admin/admin_reports_page.dart';
 import '../../features/admin/admin_berita_page.dart';
 import '../../features/admin/admin_billing_page.dart';
+import '../../features/admin/admin_insiden_page.dart';
+import '../../features/admin/admin_daftar_tamu_page.dart';
+import '../../features/security/satpam_laporan_page.dart';
+import '../../features/security/satpam_daftar_tamu_page.dart';
+import '../../features/security/satpam_insiden_page.dart';
 
 class AppRouter {
   AppRouter._();
@@ -28,18 +35,23 @@ class AppRouter {
   // ── Route names ───────────────────────────────────────────────────
   static const String splash        = '/';
   static const String login         = '/login';
-  static const String register      = '/register';
+  static const String register        = '/register';
+  static const String forgotPassword  = '/forgot-password';
   static const String home          = '/home';
   static const String satpamHome    = '/satpam-home';
   static const String layanan       = '/layanan';
   static const String komunitas     = '/komunitas';
   static const String profil        = '/profil';
+  static const String pengaturan    = '/pengaturan';
   static const String security      = '/security';
   static const String bantuanSatpam = '/bantuan-satpam';
   static const String tagihan       = '/tagihan';
   static const String satpamPatroli   = '/satpam/patroli';
   static const String satpamReports   = '/satpam/reports';
-  static const String satpamCatatTamu = '/satpam/catat-tamu';
+  static const String satpamCatatTamu  = '/satpam/catat-tamu';
+  static const String satpamLaporan    = '/satpam/laporan';
+  static const String satpamDaftarTamu = '/satpam/daftar-tamu';
+  static const String satpamInsiden    = '/satpam/insiden';
   static const String adminHome       = '/admin-home';
   static const String adminWargaUser  = '/admin/warga-user';
   static const String adminSecurity    = '/admin/security';
@@ -47,67 +59,85 @@ class AppRouter {
   static const String adminReports     = '/admin/reports';
   static const String adminBerita      = '/admin/berita';
   static const String adminBilling     = '/admin/billing';
+  static const String adminInsiden     = '/admin/insiden';
+  static const String adminDaftarTamu  = '/admin/daftar-tamu';
 
   // ── Route generator ───────────────────────────────────────────────
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     switch (settings.name) {
       case splash:
-        return _fade(const SplashScreen());
+        return _fade(const SplashScreen(), settings);
       case login:
-        return _fade(const LoginPage());
+        return _fade(const LoginPage(), settings);
       case register:
-        return _slide(const RegisterPage());
+        return _slide(const RegisterPage(), settings);
+      case forgotPassword:
+        return _slide(const ForgotPasswordPage(), settings);
       case home:
         final role = AuthRepository.currentUser?.role;
         if (role == UserRole.satpam) {
-          return _fade(const SatpamHomePage());
+          return _fade(const SatpamHomePage(), settings);
         }
         if (role == UserRole.admin) {
-          return _fade(const AdminHomePage());
+          return _fade(const AdminHomePage(), settings);
         }
-        return _fade(const HomePage());
+        return _fade(const HomePage(), settings);
       case adminHome:
-        return _fade(const AdminHomePage());
+        return _fade(const AdminHomePage(), settings);
       case adminWargaUser:
-        return _fade(const WargaUserPage());
+        return _fade(const WargaUserPage(), settings);
       case adminSecurity:
-        return _fade(const AdminSecurityPage());
+        return _fade(const AdminSecurityPage(), settings);
       case adminFacilities:
-        return _fade(const AdminFacilitiesPage());
+        return _fade(const AdminFacilitiesPage(), settings);
       case adminReports:
-        return _fade(const AdminReportsPage());
+        return _fade(const AdminReportsPage(), settings);
       case adminBerita:
         return _fade(const AdminBeritaPage());
       case adminBilling:
         return _fade(const AdminBillingPage());
+      case adminInsiden:
+        return _fade(const AdminInsidenPage(), settings);
+      case adminDaftarTamu:
+        return _fade(const AdminDaftarTamuPage(), settings);
       case satpamHome:
-        return _fade(const SatpamHomePage());
+        return _fade(const SatpamHomePage(), settings);
       case layanan:
-        return _fade(const LayananPage());
+        return _fade(const LayananPage(), settings);
       case komunitas:
-        return _fade(const KomunitasPage());
+        return _fade(const KomunitasPage(), settings);
       case profil:
-        return _fade(const ProfilPage());
+        return _fade(const ProfilPage(), settings);
+      case pengaturan:
+        return _slide(const PengaturanPage(), settings);
       case security:
-        return _slide(const SecurityPage());
+        return _slide(const SecurityPage(), settings);
       case bantuanSatpam:
-        return _slide(const BantuanSatpamPage());
+        return _slide(const BantuanSatpamPage(), settings);
       case tagihan:
-        return _slide(const TagihanPage());
+        return _slide(const TagihanPage(), settings);
       case satpamPatroli:
-        return _slide(const SatpamPatroliPage());
+        return _slide(const SatpamPatroliPage(), settings);
       case satpamReports:
-        return _slide(const SatpamReportsPage());
+        return _slide(const SatpamReportsPage(), settings);
       case satpamCatatTamu:
-        return _slide(const SatpamCatatTamuPage());
+        return _slide(const SatpamCatatTamuPage(), settings);
+      case satpamLaporan:
+        return _slide(const SatpamLaporanPage(), settings);
+      case satpamDaftarTamu:
+        return _slide(const SatpamDaftarTamuPage(), settings);
+      case satpamInsiden:
+        return _slide(const SatpamInsidenPage(), settings);
       default:
-        return _fade(const SplashScreen());
+        return _fade(const SplashScreen(), settings);
     }
   }
 
   // ── Transitions ───────────────────────────────────────────────────
-  static PageRouteBuilder _fade(Widget page) {
+  // PENTING: settings harus diteruskan agar ModalRoute.withName() bisa match
+  static PageRouteBuilder _fade(Widget page, RouteSettings settings) {
     return PageRouteBuilder(
+      settings: settings,
       pageBuilder: (_, __, ___) => page,
       transitionsBuilder: (_, animation, __, child) =>
           FadeTransition(opacity: animation, child: child),
@@ -115,8 +145,9 @@ class AppRouter {
     );
   }
 
-  static PageRouteBuilder _slide(Widget page) {
+  static PageRouteBuilder _slide(Widget page, RouteSettings settings) {
     return PageRouteBuilder(
+      settings: settings,
       pageBuilder: (_, __, ___) => page,
       transitionsBuilder: (_, animation, __, child) {
         final tween = Tween(

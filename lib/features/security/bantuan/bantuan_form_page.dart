@@ -1,8 +1,10 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/services/bantuan_service.dart';
+import '../../../core/router/app_router.dart';
 import 'bantuan_satpam_page.dart';
 
 class BantuanFormPage extends StatefulWidget {
@@ -17,25 +19,40 @@ class BantuanFormPage extends StatefulWidget {
 class _BantuanFormPageState extends State<BantuanFormPage> {
   final _catatanController = TextEditingController();
   final _picker = ImagePicker();
-  final List<XFile> _selectedImages = [];
+
+  // Simpan sebagai Uint8List agar kompatibel web & Android (tidak pakai dart:io)
+  final List<Uint8List> _selectedImages = [];
   bool _isLoading = false;
+  String _lokasi = 'Memuat...';
 
   static const _maxImages = 3;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLokasi();
+  }
+
+  Future<void> _loadLokasi() async {
+    final lokasi = await BantuanService.getUserLokasi();
+    if (mounted) setState(() => _lokasi = lokasi);
+  }
 
   Future<void> _pickImage() async {
     if (_selectedImages.length >= _maxImages) return;
     final image = await _picker.pickImage(
       source: ImageSource.gallery,
-      imageQuality: 80,
+      imageQuality: 60,
+      maxWidth: 800,
+      maxHeight: 600,
     );
-    if (image != null) {
-      setState(() => _selectedImages.add(image));
-    }
+    if (image == null) return;
+    final bytes = await image.readAsBytes();
+    setState(() => _selectedImages.add(bytes));
   }
 
-  void _removeImage(int index) {
-    setState(() => _selectedImages.removeAt(index));
-  }
+  void _removeImage(int index) =>
+      setState(() => _selectedImages.removeAt(index));
 
   @override
   void dispose() {
@@ -45,33 +62,39 @@ class _BantuanFormPageState extends State<BantuanFormPage> {
 
   Future<void> _kirimLaporan() async {
     setState(() => _isLoading = true);
-    await Future.delayed(const Duration(milliseconds: 1200));
+
+    final result = await BantuanService.sendRequest(
+      kategori: widget.category.title,
+      catatan: _catatanController.text.trim(),
+    );
+
     if (!mounted) return;
     setState(() => _isLoading = false);
 
-    // Kembali ke security page + tampilkan snackbar sukses
-    Navigator.popUntil(context, (route) => route.settings.name == '/security');
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle, color: Colors.white, size: 18),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'Laporan terkirim. Satpam akan segera merespons.',
-                style: GoogleFonts.inter(fontSize: 13),
-              ),
-            ),
-          ],
+    if (result == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Gagal mengirim laporan. Coba lagi.',
+            style: GoogleFonts.inter(fontSize: 13),
+          ),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          margin: const EdgeInsets.all(16),
         ),
-        backgroundColor: Colors.green.shade600,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        margin: const EdgeInsets.all(16),
-        duration: const Duration(seconds: 3),
-      ),
-    );
+      );
+      return;
+    }
+
+    // Sukses — kembali ke home, status tampil di sana sebagai kartu
+    if (mounted) {
+      Navigator.popUntil(
+        context,
+        ModalRoute.withName(AppRouter.home),
+      );
+    }
   }
 
   @override
@@ -105,7 +128,7 @@ class _BantuanFormPageState extends State<BantuanFormPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // --- Info kategori ---
+                // ── Info kategori ─────────────────────────────────────────
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
@@ -113,7 +136,7 @@ class _BantuanFormPageState extends State<BantuanFormPage> {
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
+                        color: Colors.black.withValues(alpha: 0.04),
                         blurRadius: 12,
                         offset: const Offset(0, 4),
                       ),
@@ -125,14 +148,11 @@ class _BantuanFormPageState extends State<BantuanFormPage> {
                         width: 52,
                         height: 52,
                         decoration: BoxDecoration(
-                          color: AppColors.primary.withOpacity(0.1),
+                          color: AppColors.primary.withValues(alpha: 0.1),
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(
-                          widget.category.icon,
-                          color: AppColors.primary,
-                          size: 26,
-                        ),
+                        child: Icon(widget.category.icon,
+                            color: AppColors.primary, size: 26),
                       ),
                       const SizedBox(width: 16),
                       Column(
@@ -150,9 +170,7 @@ class _BantuanFormPageState extends State<BantuanFormPage> {
                           Text(
                             widget.category.subtitle,
                             style: GoogleFonts.inter(
-                              fontSize: 13,
-                              color: AppColors.textGrey,
-                            ),
+                                fontSize: 13, color: AppColors.textGrey),
                           ),
                         ],
                       ),
@@ -162,22 +180,12 @@ class _BantuanFormPageState extends State<BantuanFormPage> {
 
                 const SizedBox(height: 24),
 
-                // --- Lokasi kejadian (otomatis dari profil) ---
-                Text(
-                  'LOKASI',
-                  style: GoogleFonts.inter(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textGrey,
-                    letterSpacing: 0.8,
-                  ),
-                ),
+                // ── Lokasi (otomatis dari profil) ─────────────────────────
+                _sectionLabel('LOKASI'),
                 const SizedBox(height: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 14,
-                  ),
+                      horizontal: 16, vertical: 14),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(12),
@@ -185,27 +193,23 @@ class _BantuanFormPageState extends State<BantuanFormPage> {
                   ),
                   child: Row(
                     children: [
-                      Icon(
-                        Icons.location_on_outlined,
-                        color: AppColors.primary,
-                        size: 20,
-                      ),
+                      Icon(Icons.location_on_outlined,
+                          color: AppColors.primary, size: 20),
                       const SizedBox(width: 10),
-                      Text(
-                        'Blok A - No. 42',
-                        style: GoogleFonts.inter(
-                          fontSize: 14,
-                          color: AppColors.textDark,
-                          fontWeight: FontWeight.w500,
+                      Expanded(
+                        child: Text(
+                          _lokasi,
+                          style: GoogleFonts.inter(
+                            fontSize: 14,
+                            color: AppColors.textDark,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
-                      const Spacer(),
                       Text(
                         'Otomatis',
                         style: GoogleFonts.inter(
-                          fontSize: 12,
-                          color: AppColors.textGrey,
-                        ),
+                            fontSize: 12, color: AppColors.textGrey),
                       ),
                     ],
                   ),
@@ -213,71 +217,50 @@ class _BantuanFormPageState extends State<BantuanFormPage> {
 
                 const SizedBox(height: 20),
 
-                // --- Catatan (opsional) ---
-                Text(
-                  'CATATAN (OPSIONAL)',
-                  style: GoogleFonts.inter(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textGrey,
-                    letterSpacing: 0.8,
-                  ),
-                ),
+                // ── Catatan ───────────────────────────────────────────────
+                _sectionLabel('CATATAN (OPSIONAL)'),
                 const SizedBox(height: 8),
                 TextField(
                   controller: _catatanController,
                   maxLines: 4,
                   maxLength: 200,
                   style: GoogleFonts.inter(
-                    fontSize: 14,
-                    color: AppColors.textDark,
-                  ),
+                      fontSize: 14, color: AppColors.textDark),
                   decoration: InputDecoration(
                     hintText: 'Jelaskan situasi secara singkat...',
                     hintStyle: GoogleFonts.inter(
-                      fontSize: 14,
-                      color: AppColors.textGrey,
-                    ),
+                        fontSize: 14, color: AppColors.textGrey),
                     filled: true,
                     fillColor: Colors.white,
                     contentPadding: const EdgeInsets.all(16),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Colors.grey.shade200),
+                      borderSide:
+                          BorderSide(color: Colors.grey.shade200),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Colors.grey.shade200),
+                      borderSide:
+                          BorderSide(color: Colors.grey.shade200),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: const BorderSide(
-                        color: AppColors.primary,
-                        width: 1.5,
-                      ),
+                          color: AppColors.primary, width: 1.5),
                     ),
                   ),
                 ),
 
                 const SizedBox(height: 20),
 
-                // --- Upload foto bukti ---
-                Text(
-                  'TAMBAH FOTO BUKTI (OPSIONAL)',
-                  style: GoogleFonts.inter(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textGrey,
-                    letterSpacing: 0.8,
-                  ),
-                ),
+                // ── Upload foto bukti ─────────────────────────────────────
+                _sectionLabel('TAMBAH FOTO BUKTI (OPSIONAL)'),
                 const SizedBox(height: 8),
                 SizedBox(
                   height: 100,
                   child: ListView(
                     scrollDirection: Axis.horizontal,
                     children: [
-                      // Tombol tambah foto
                       if (_selectedImages.length < _maxImages)
                         GestureDetector(
                           onTap: _pickImage,
@@ -289,9 +272,9 @@ class _BantuanFormPageState extends State<BantuanFormPage> {
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: AppColors.primary.withOpacity(0.4),
+                                color:
+                                    AppColors.primary.withValues(alpha: 0.4),
                                 width: 1.5,
-                                strokeAlign: BorderSide.strokeAlignInside,
                               ),
                             ),
                             child: Column(
@@ -316,10 +299,7 @@ class _BantuanFormPageState extends State<BantuanFormPage> {
                             ),
                           ),
                         ),
-                      // Preview foto yang sudah dipilih
-                      ..._selectedImages.asMap().entries.map((entry) {
-                        final i = entry.key;
-                        final img = entry.value;
+                      ..._selectedImages.asMap().entries.map((e) {
                         return Stack(
                           children: [
                             Container(
@@ -329,7 +309,7 @@ class _BantuanFormPageState extends State<BantuanFormPage> {
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(12),
                                 image: DecorationImage(
-                                  image: FileImage(File(img.path)),
+                                  image: MemoryImage(e.value),
                                   fit: BoxFit.cover,
                                 ),
                               ),
@@ -338,7 +318,7 @@ class _BantuanFormPageState extends State<BantuanFormPage> {
                               top: 4,
                               right: 14,
                               child: GestureDetector(
-                                onTap: () => _removeImage(i),
+                                onTap: () => _removeImage(e.key),
                                 child: Container(
                                   width: 22,
                                   height: 22,
@@ -346,11 +326,8 @@ class _BantuanFormPageState extends State<BantuanFormPage> {
                                     color: Colors.black54,
                                     shape: BoxShape.circle,
                                   ),
-                                  child: const Icon(
-                                    Icons.close,
-                                    color: Colors.white,
-                                    size: 14,
-                                  ),
+                                  child: const Icon(Icons.close,
+                                      color: Colors.white, size: 14),
                                 ),
                               ),
                             ),
@@ -364,30 +341,23 @@ class _BantuanFormPageState extends State<BantuanFormPage> {
                 Text(
                   'Maksimal $_maxImages foto',
                   style: GoogleFonts.inter(
-                    fontSize: 11,
-                    color: AppColors.textGrey,
-                  ),
+                      fontSize: 11, color: AppColors.textGrey),
                 ),
 
                 const SizedBox(height: 16),
 
-                // --- Info estimasi respons ---
+                // ── Estimasi respons ──────────────────────────────────────
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
-                  ),
+                      horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.06),
+                    color: AppColors.primary.withValues(alpha: 0.06),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
                     children: [
-                      Icon(
-                        Icons.access_time_rounded,
-                        color: AppColors.primary,
-                        size: 16,
-                      ),
+                      Icon(Icons.access_time_rounded,
+                          color: AppColors.primary, size: 16),
                       const SizedBox(width: 8),
                       Text(
                         'Estimasi respons satpam: 3–5 menit',
@@ -403,7 +373,7 @@ class _BantuanFormPageState extends State<BantuanFormPage> {
 
                 const SizedBox(height: 32),
 
-                // --- Tombol kirim ---
+                // ── Tombol kirim ──────────────────────────────────────────
                 SizedBox(
                   width: double.infinity,
                   height: 52,
@@ -414,19 +384,16 @@ class _BantuanFormPageState extends State<BantuanFormPage> {
                       foregroundColor: Colors.white,
                       elevation: 0,
                       disabledBackgroundColor:
-                          AppColors.primary.withOpacity(0.5),
+                          AppColors.primary.withValues(alpha: 0.5),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
+                          borderRadius: BorderRadius.circular(14)),
                     ),
                     child: _isLoading
                         ? const SizedBox(
                             width: 22,
                             height: 22,
                             child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2.5,
-                            ),
+                                color: Colors.white, strokeWidth: 2.5),
                           )
                         : Row(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -444,34 +411,6 @@ class _BantuanFormPageState extends State<BantuanFormPage> {
                           ),
                   ),
                 ),
-
-                const SizedBox(height: 12),
-
-                // --- Tombol hubungi langsung ---
-                SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      // TODO: url_launcher → tel:nomor_satpam
-                    },
-                    icon: const Icon(Icons.phone_outlined, size: 18),
-                    label: Text(
-                      'Hubungi Langsung',
-                      style: GoogleFonts.inter(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.primary,
-                      side: const BorderSide(color: AppColors.primary),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
@@ -479,4 +418,14 @@ class _BantuanFormPageState extends State<BantuanFormPage> {
       ),
     );
   }
+
+  Widget _sectionLabel(String text) => Text(
+        text,
+        style: GoogleFonts.inter(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: AppColors.textGrey,
+          letterSpacing: 0.8,
+        ),
+      );
 }

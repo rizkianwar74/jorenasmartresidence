@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_colors.dart';
 
 class ServiceHelpBanner extends StatelessWidget {
   const ServiceHelpBanner({
@@ -24,7 +24,7 @@ class ServiceHelpBanner extends StatelessWidget {
         margin: const EdgeInsets.symmetric(horizontal: 24),
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: AppColors.primary.withOpacity(0.08),
+          color: AppColors.primary.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Row(
@@ -61,7 +61,7 @@ class ServiceHelpBanner extends StatelessWidget {
                     message,
                     style: GoogleFonts.inter(
                       fontSize: 13,
-                      color: AppColors.textDark.withOpacity(0.7),
+                      color: AppColors.textDark.withValues(alpha: 0.7),
                       height: 1.5,
                     ),
                   ),

@@ -52,7 +52,7 @@ class FasilitasPage extends StatelessWidget {
                         color: Colors.grey.shade100,
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.08),
+                            color: Colors.black.withValues(alpha: 0.08),
                             blurRadius: 20,
                             offset: const Offset(0, 8),
                           ),
@@ -72,7 +72,7 @@ class FasilitasPage extends StatelessWidget {
                                     size: 64, color: Colors.grey.shade400),
                               ),
                             ),
-                            Container(color: Colors.black.withOpacity(0.35)),
+                            Container(color: Colors.black.withValues(alpha: 0.35)),
                             Center(
                               child: Text(
                                 'COMING SOON',
@@ -101,7 +101,7 @@ class FasilitasPage extends StatelessWidget {
                           borderRadius: BorderRadius.circular(20),
                           boxShadow: [
                             BoxShadow(
-                              color: AppColors.primary.withOpacity(0.4),
+                              color: AppColors.primary.withValues(alpha: 0.4),
                               blurRadius: 8,
                               offset: const Offset(0, 3),
                             ),

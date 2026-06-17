@@ -1,6 +1,8 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/app_colors.dart';
+import 'data/security_repository.dart';
 
 class SatpamCatatTamuPage extends StatefulWidget {
   const SatpamCatatTamuPage({super.key});
@@ -20,8 +22,9 @@ class _SatpamCatatTamuPageState extends State<SatpamCatatTamuPage> {
   final _nomorRumahController = TextEditingController();
 
   // State
-  String _jenisKendaraan = 'Mobil';
+  String _jenisKendaraan    = 'Mobil';
   String? _kategoriKunjungan;
+  bool   _saving            = false;
 
   static const _jenisOptions    = ['Mobil', 'Motor', 'Lainnya'];
   static const _kategoriOptions = [
@@ -43,20 +46,77 @@ class _SatpamCatatTamuPageState extends State<SatpamCatatTamuPage> {
     super.dispose();
   }
 
-  void _simpan() {
-    // TODO: simpan ke Firestore
+  // ── Validasi ─────────────────────────────────────────────────────────────
+  String? _validate() {
+    if (_namaController.text.trim().isEmpty)       return 'Nama tamu wajib diisi';
+    if (_kategoriKunjungan == null)                return 'Kategori kunjungan wajib dipilih';
+    if (_blokController.text.trim().isEmpty)       return 'Blok tujuan wajib diisi';
+    if (_nomorRumahController.text.trim().isEmpty) return 'Nomor rumah tujuan wajib diisi';
+    return null;
+  }
+
+  void _showError(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          'Data tamu berhasil disimpan & akses diberikan',
-          style: GoogleFonts.inter(fontSize: 13),
-        ),
-        backgroundColor: const Color(0xFF2E7D32),
+        content: Text(msg, style: GoogleFonts.inter(fontSize: 13)),
+        backgroundColor: Colors.red.shade600,
         behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
-    Navigator.pop(context);
+  }
+
+  // ── Simpan ke Firestore ───────────────────────────────────────────────────
+  Future<void> _simpan() async {
+    final err = _validate();
+    if (err != null) { _showError(err); return; }
+    if (_saving) return;
+
+    setState(() => _saving = true);
+
+    try {
+      final repo       = SecurityRepository.instance;
+      final uid        = repo.currentSatpamUid;
+      final namaSatpam = repo.satpamDisplayName;
+
+      await repo.catatTamu({
+        'namaTamu'          : _namaController.text.trim(),
+        'jenisKendaraan'    : _jenisKendaraan,
+        'nomorPlat'         : _platController.text.trim().toUpperCase(),
+        'kategoriKunjungan' : _kategoriKunjungan,
+        'keterangan'        : _keteranganController.text.trim(),
+        'blokTujuan'        : _blokController.text.trim().toUpperCase(),
+        'nomorRumahTujuan'  : _nomorRumahController.text.trim(),
+        'satpamUid'         : uid,
+        'namaSatpam'        : namaSatpam,
+        'status'            : 'MASUK',
+        'waktuMasuk'        : FieldValue.serverTimestamp(),
+        'waktuKeluar'       : null,
+        'createdAt'         : FieldValue.serverTimestamp(),
+      });
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Data tamu berhasil dicatat',
+            style: GoogleFonts.inter(fontSize: 13),
+          ),
+          backgroundColor: const Color(0xFF2E7D32),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+      Navigator.pop(context);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        _showError('Gagal menyimpan: $e');
+      }
+    }
   }
 
   @override
@@ -126,7 +186,7 @@ class _SatpamCatatTamuPageState extends State<SatpamCatatTamuPage> {
                             // Toggle segmented
                             Container(
                               decoration: BoxDecoration(
-                                color: AppColors.primary.withOpacity(0.08),
+                                color: AppColors.primary.withValues(alpha: 0.08),
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               padding: const EdgeInsets.all(4),
@@ -152,7 +212,7 @@ class _SatpamCatatTamuPageState extends State<SatpamCatatTamuPage> {
                                               ? [
                                                   BoxShadow(
                                                     color: Colors.black
-                                                        .withOpacity(0.08),
+                                                        .withValues(alpha: 0.08),
                                                     blurRadius: 6,
                                                     offset:
                                                         const Offset(0, 2),
@@ -211,7 +271,7 @@ class _SatpamCatatTamuPageState extends State<SatpamCatatTamuPage> {
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
-                                    color: AppColors.primary.withOpacity(0.4)),
+                                    color: AppColors.primary.withValues(alpha: 0.4)),
                               ),
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 12, vertical: 2),
@@ -254,7 +314,7 @@ class _SatpamCatatTamuPageState extends State<SatpamCatatTamuPage> {
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
-                                    color: AppColors.primary.withOpacity(0.4)),
+                                    color: AppColors.primary.withValues(alpha: 0.4)),
                               ),
                               child: TextField(
                                 controller: _keteranganController,
@@ -338,26 +398,42 @@ class _SatpamCatatTamuPageState extends State<SatpamCatatTamuPage> {
               // Simpan & Beri Akses
               Expanded(
                 flex: 3,
-                child: ElevatedButton.icon(
-                  onPressed: _simpan,
-                  icon: const Icon(Icons.how_to_reg_outlined,
-                      color: Colors.white, size: 18),
-                  label: Text(
-                    'Simpan & Beri Akses',
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
+                child: ElevatedButton(
+                  onPressed: _saving ? null : _simpan,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
+                    disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.6),
                     elevation: 0,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
+                  child: _saving
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.how_to_reg_outlined,
+                                color: Colors.white, size: 18),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Simpan & Beri Akses',
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -410,9 +486,9 @@ class _FormSection extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.primary.withOpacity(0.05),
+        color: AppColors.primary.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.primary.withOpacity(0.15)),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -482,7 +558,7 @@ class _StyledTextField extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.primary.withOpacity(0.5)),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.5)),
       ),
       child: TextField(
         controller: controller,

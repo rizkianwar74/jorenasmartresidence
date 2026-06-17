@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 
@@ -5,16 +6,40 @@ class ProfileAvatar extends StatelessWidget {
   const ProfileAvatar({
     super.key,
     this.imageUrl,
+    this.name,
     this.radius = 56,
     this.onEditTap,
   });
 
   final String? imageUrl;
+  final String? name;
   final double radius;
   final VoidCallback? onEditTap;
 
+  String get _initials {
+    if (name == null || name!.trim().isEmpty) return '?';
+    final parts = name!.trim().split(' ');
+    if (parts.length >= 2) {
+      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    }
+    return parts[0][0].toUpperCase();
+  }
+
+  bool get _isBase64 =>
+      imageUrl != null && imageUrl!.startsWith('data:image');
+
+  ImageProvider? get _imageProvider {
+    if (imageUrl == null || imageUrl!.isEmpty) return null;
+    if (_isBase64) {
+      final base64Str = imageUrl!.split(',').last;
+      return MemoryImage(base64Decode(base64Str));
+    }
+    return NetworkImage(imageUrl!);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final provider = _imageProvider;
     return Stack(
       children: [
         Container(
@@ -26,20 +51,25 @@ class ProfileAvatar extends StatelessWidget {
             border: Border.all(color: Colors.white, width: 4),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.12),
+                color: Colors.black.withValues(alpha: 0.12),
                 blurRadius: 16,
                 offset: const Offset(0, 4),
               ),
             ],
-            image: imageUrl != null
-                ? DecorationImage(
-                    image: NetworkImage(imageUrl!),
-                    fit: BoxFit.cover,
-                  )
+            image: provider != null
+                ? DecorationImage(image: provider, fit: BoxFit.cover)
                 : null,
           ),
-          child: imageUrl == null
-              ? const Icon(Icons.person, color: Colors.white, size: 48)
+          alignment: Alignment.center,
+          child: provider == null
+              ? Text(
+                  _initials,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: radius * 0.6,
+                    fontWeight: FontWeight.bold,
+                  ),
+                )
               : null,
         ),
         Positioned(

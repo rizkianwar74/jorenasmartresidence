@@ -87,7 +87,7 @@ class _SosButtonState extends State<SosButton>
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.red.withOpacity(_isHolding ? 0.5 : 0.3),
+                      color: Colors.red.withValues(alpha: _isHolding ? 0.5 : 0.3),
                       blurRadius: _isHolding ? 24 : 16,
                       spreadRadius: _isHolding ? 4 : 0,
                     ),

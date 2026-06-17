@@ -13,7 +13,7 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
-  final _usernameController = TextEditingController();
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
   bool _obscurePassword = true;
@@ -21,7 +21,7 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   void dispose() {
-    _usernameController.dispose();
+    _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -37,7 +37,7 @@ class _LoginPageState extends State<LoginPage> {
     if (!mounted) return;
 
     final result = await AuthRepository.login(
-      _usernameController.text, // isi dengan email
+      _emailController.text,
       _passwordController.text,
     );
 
@@ -49,7 +49,7 @@ class _LoginPageState extends State<LoginPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Username atau password salah',
+            'Email atau password salah',
             style: GoogleFonts.inter(fontSize: 13),
           ),
           backgroundColor: Colors.red.shade600,
@@ -90,7 +90,7 @@ class _LoginPageState extends State<LoginPage> {
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.06),
+                            color: Colors.black.withValues(alpha: 0.06),
                             blurRadius: 20,
                             offset: const Offset(0, 4),
                           ),
@@ -126,23 +126,26 @@ class _LoginPageState extends State<LoginPage> {
 
                     const SizedBox(height: 40),
 
-                    // --- Field Username ---
-                    _buildFieldLabel('Username'),
+                    // --- Field Email ---
+                    _buildFieldLabel('Email'),
                     const SizedBox(height: 8),
                     TextFormField(
-                      controller: _usernameController,
-                      keyboardType: TextInputType.text,
+                      controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
                       style: GoogleFonts.inter(
                         fontSize: 14,
                         color: AppColors.textDark,
                       ),
                       decoration: _inputDecoration(
-                        hint: 'Masukkan username',
-                        prefixIcon: Icons.person_outline,
+                        hint: 'Masukkan email',
+                        prefixIcon: Icons.email_outlined,
                       ),
                       validator: (v) {
                         if (v == null || v.trim().isEmpty) {
-                          return 'Username tidak boleh kosong';
+                          return 'Email tidak boleh kosong';
+                        }
+                        if (!v.contains('@') || !v.contains('.')) {
+                          return 'Format email tidak valid';
                         }
                         return null;
                       },
@@ -157,7 +160,8 @@ class _LoginPageState extends State<LoginPage> {
                         _buildFieldLabel('Password'),
                         GestureDetector(
                           onTap: () {
-                            // TODO: navigasi ke halaman forgot password
+                            Navigator.pushNamed(
+                                context, AppRouter.forgotPassword);
                           },
                           child: Text(
                             'Forgot Password?',
@@ -218,7 +222,7 @@ class _LoginPageState extends State<LoginPage> {
                           foregroundColor: Colors.white,
                           elevation: 0,
                           disabledBackgroundColor: AppColors.primary
-                              .withOpacity(0.6),
+                              .withValues(alpha: 0.6),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
@@ -281,14 +285,14 @@ class _LoginPageState extends State<LoginPage> {
                         Icon(
                           Icons.shield_outlined,
                           size: 14,
-                          color: AppColors.textGrey.withOpacity(0.6),
+                          color: AppColors.textGrey.withValues(alpha: 0.6),
                         ),
                         const SizedBox(width: 6),
                         Text(
                           'Secured by EstateFlow Systems',
                           style: GoogleFonts.inter(
                             fontSize: 11,
-                            color: AppColors.textGrey.withOpacity(0.6),
+                            color: AppColors.textGrey.withValues(alpha: 0.6),
                           ),
                         ),
                       ],

@@ -7,6 +7,7 @@ import 'widgets/service_card.dart';
 import 'lapor_keluhan/lapor_keluhan_page.dart';
 import 'kantin/kantin_page.dart';
 import 'fasilitas/fasilitas_page.dart';
+import 'pusat_bantuan/pusat_bantuan_page.dart';
 import 'widgets/service_help_banner.dart';
 
 class LayananPage extends StatelessWidget {
@@ -116,6 +117,13 @@ class LayananPage extends StatelessWidget {
                                     context,
                                     MaterialPageRoute(
                                       builder: (_) => const FasilitasPage(),
+                                    ),
+                                  );
+                                } else if (s.title == 'Darurat') {
+                                  handler = () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const PusatBantuanPage(),
                                     ),
                                   );
                                 } else if (s.title == 'Kantin') {

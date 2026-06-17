@@ -42,7 +42,7 @@ class AdminFacilitiesPage extends StatelessWidget {
                             borderRadius: BorderRadius.circular(16),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.05),
+                                color: Colors.black.withValues(alpha: 0.05),
                                 blurRadius: 20,
                                 offset: const Offset(0, 4),
                               ),
@@ -61,7 +61,7 @@ class AdminFacilitiesPage extends StatelessWidget {
                                       Icons.apartment_rounded,
                                       size: 110,
                                       color: const Color(0xFF1E3A8A)
-                                          .withOpacity(0.85),
+                                          .withValues(alpha: 0.85),
                                     ),
                                     Positioned(
                                       bottom: 8,
@@ -74,7 +74,7 @@ class AdminFacilitiesPage extends StatelessWidget {
                                           shape: BoxShape.circle,
                                           border: Border.all(
                                             color: const Color(0xFF1E3A8A)
-                                                .withOpacity(0.2),
+                                                .withValues(alpha: 0.2),
                                             width: 2,
                                           ),
                                         ),

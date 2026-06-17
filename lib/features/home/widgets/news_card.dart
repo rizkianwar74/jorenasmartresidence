@@ -1,7 +1,9 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_colors.dart';
 
 class NewsCard extends StatelessWidget {
   const NewsCard({
@@ -40,7 +42,7 @@ class NewsCard extends StatelessWidget {
                     color: Colors.grey.shade200,
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
+                        color: Colors.black.withValues(alpha: 0.1),
                         blurRadius: 4,
                         offset: const Offset(0, 2),
                       ),
@@ -48,27 +50,10 @@ class NewsCard extends StatelessWidget {
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
-                    child: Image.network(
-                      imageUrl,
-                      fit: BoxFit.cover,
+                    child: _BeritaImage(
+                      imageUrl: imageUrl,
                       width: double.infinity,
-                      errorBuilder: (_, __, ___) => Container(
-                        color: Colors.grey.shade200,
-                        child: const Icon(
-                          Icons.broken_image_outlined,
-                          color: Colors.grey,
-                          size: 40,
-                        ),
-                      ),
-                      loadingBuilder: (_, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return Container(
-                          color: Colors.grey.shade100,
-                          child: const Center(
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        );
-                      },
+                      height: double.infinity,
                     ),
                   ),
                 ),
@@ -84,7 +69,7 @@ class NewsCard extends StatelessWidget {
                           horizontal: 8,
                           vertical: 4,
                         ),
-                        color: Colors.white.withOpacity(0.9),
+                        color: Colors.white.withValues(alpha: 0.9),
                         child: Text(
                           category,
                           style: GoogleFonts.inter(
@@ -140,6 +125,63 @@ class NewsCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ── Helper: tampilkan gambar dari URL biasa atau base64 data URL ──────────────
+
+class _BeritaImage extends StatelessWidget {
+  const _BeritaImage({
+    required this.imageUrl,
+    this.width,
+    this.height,
+    this.fit = BoxFit.cover,
+  });
+
+  final String imageUrl;
+  final double? width;
+  final double? height;
+  final BoxFit fit;
+
+  static Widget _placeholder() => Container(
+        color: Colors.grey.shade200,
+        child: const Center(
+          child: Icon(Icons.image_outlined, color: Colors.grey, size: 36),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    if (imageUrl.isEmpty) return _placeholder();
+
+    // Base64 data URL — simpan di Firestore
+    if (imageUrl.startsWith('data:')) {
+      try {
+        final Uint8List bytes = base64Decode(imageUrl.split(',').last);
+        return Image.memory(bytes,
+            width: width, height: height, fit: fit,
+            errorBuilder: (_, __, ___) => _placeholder());
+      } catch (_) {
+        return _placeholder();
+      }
+    }
+
+    // URL biasa (https://)
+    return Image.network(
+      imageUrl,
+      width: width,
+      height: height,
+      fit: fit,
+      errorBuilder: (_, __, ___) => _placeholder(),
+      loadingBuilder: (_, child, progress) {
+        if (progress == null) return child;
+        return Container(
+          color: Colors.grey.shade100,
+          child: const Center(
+              child: CircularProgressIndicator(strokeWidth: 2)),
+        );
+      },
     );
   }
 }
