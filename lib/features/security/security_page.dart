@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/services/sos_service.dart';
+import 'data/security_repository.dart';
 import 'bantuan/bantuan_satpam_page.dart';
 import 'sos_status_page.dart';
 import 'widgets/sos_button.dart';
@@ -89,15 +90,10 @@ class _SecurityPageState extends State<SecurityPage> {
   }
 
   void _loadSatpam() {
-    _satpamSub = FirebaseFirestore.instance
-        .collection('users')
-        .where('role', isEqualTo: 'satpam')
-        .where('isOnDuty', isEqualTo: true)
-        .snapshots()
-        .listen(
+    _satpamSub = SecurityRepository.instance.satpamOnDutyStream().listen(
           (snap) {
             final list = snap.docs.map((d) {
-              final data = d.data() as Map<String, dynamic>;
+              final data = d.data();
               return _SatpamInfo(
                 namaLengkap: (data['namaLengkap'] as String?)?.trim() ?? 'Satpam',
                 nomorHp    : (data['nomorHp']     as String?)?.trim() ?? '-',
@@ -125,14 +121,11 @@ class _SecurityPageState extends State<SecurityPage> {
 
   // ── Stream: patroli ───────────────────────────────────────────────────────
   void _startPatroliStream() {
-    _patroliSub = FirebaseFirestore.instance
-        .collection('patroli')
-        .orderBy('createdAt', descending: true)
-        .limit(10)
-        .snapshots()
+    _patroliSub = SecurityRepository.instance
+        .patroliTerbaruStream(limit: 10)
         .listen((snap) {
       _patroliItems = snap.docs.map((doc) {
-        final d          = doc.data() as Map<String, dynamic>;
+        final d          = doc.data();
         final status     = d['status'] as String? ?? '';
         final blok       = d['blokPatroli'] as String? ?? '-';
         final nama       = d['namaSatpam']  as String? ?? 'Satpam';
@@ -162,14 +155,11 @@ class _SecurityPageState extends State<SecurityPage> {
 
   // ── Stream: bantuanrequest ────────────────────────────────────────────────
   void _startBantuanStream() {
-    _bantuanSub = FirebaseFirestore.instance
-        .collection('bantuanrequest')
-        .orderBy('createdAt', descending: true)
-        .limit(10)
-        .snapshots()
+    _bantuanSub = SecurityRepository.instance
+        .bantuanTerbaruStream(limit: 10)
         .listen((snap) {
       _bantuanItems = snap.docs.map((doc) {
-        final d       = doc.data() as Map<String, dynamic>;
+        final d       = doc.data();
         final status  = d['status']    as String? ?? '';
         final kategori= d['kategori']  as String? ?? 'Bantuan';
         final nama    = d['namaWarga'] as String? ?? '-';
@@ -193,14 +183,11 @@ class _SecurityPageState extends State<SecurityPage> {
 
   // ── Stream: insiden ───────────────────────────────────────────────────────
   void _startInsidenStream() {
-    _insidenSubA = FirebaseFirestore.instance
-        .collection('insiden')
-        .orderBy('createdAt', descending: true)
-        .limit(10)
-        .snapshots()
+    _insidenSubA = SecurityRepository.instance
+        .insidenTerbaruStream(limit: 10)
         .listen((snap) {
       _insidenItems = snap.docs.map((doc) {
-        final d       = doc.data() as Map<String, dynamic>;
+        final d       = doc.data();
         final status  = d['status']     as String? ?? '';
         final kategori= d['kategori']   as String? ?? 'Insiden';
         final blok    = d['blok']       as String? ?? '-';
@@ -224,14 +211,11 @@ class _SecurityPageState extends State<SecurityPage> {
 
   // ── Stream: catatantamu ───────────────────────────────────────────────────
   void _startTamuStream() {
-    _tamuSubA = FirebaseFirestore.instance
-        .collection('catatantamu')
-        .orderBy('createdAt', descending: true)
-        .limit(10)
-        .snapshots()
+    _tamuSubA = SecurityRepository.instance
+        .tamuTerbaruStream(limit: 10)
         .listen((snap) {
       _tamuItems = snap.docs.map((doc) {
-        final d        = doc.data() as Map<String, dynamic>;
+        final d        = doc.data();
         final nama     = d['namaTamu']           as String? ?? 'Tamu';
         final kategori = d['kategoriKunjungan']   as String? ?? '-';
         final blok     = d['blokTujuan']          as String? ?? '-';
@@ -327,7 +311,7 @@ class _SecurityPageState extends State<SecurityPage> {
                               shape: BoxShape.circle,
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.06),
+                                  color: Colors.black.withValues(alpha: 0.06),
                                   blurRadius: 8,
                                   offset: const Offset(0, 2),
                                 ),
@@ -363,7 +347,7 @@ class _SecurityPageState extends State<SecurityPage> {
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.04),
+                          color: Colors.black.withValues(alpha: 0.04),
                           blurRadius: 12,
                           offset: const Offset(0, 4),
                         ),
@@ -410,7 +394,7 @@ class _SecurityPageState extends State<SecurityPage> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 24, vertical: 12),
                             decoration: BoxDecoration(
-                              color: AppColors.primary.withOpacity(0.08),
+                              color: AppColors.primary.withValues(alpha: 0.08),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Row(
@@ -494,7 +478,7 @@ class _SecurityPageState extends State<SecurityPage> {
                           borderRadius: BorderRadius.circular(16),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.04),
+                              color: Colors.black.withValues(alpha: 0.04),
                               blurRadius: 8,
                               offset: const Offset(0, 2),
                             ),
@@ -559,7 +543,7 @@ class _SecurityPageState extends State<SecurityPage> {
                           borderRadius: BorderRadius.circular(14),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.03),
+                              color: Colors.black.withValues(alpha: 0.03),
                               blurRadius: 8,
                               offset: const Offset(0, 2),
                             ),
@@ -605,7 +589,7 @@ class _AktivitasItem extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -656,9 +640,9 @@ class _AktivitasItem extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
               decoration: BoxDecoration(
-                color: feed.badgeColor!.withOpacity(0.1),
+                color: feed.badgeColor!.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: feed.badgeColor!.withOpacity(0.3)),
+                border: Border.all(color: feed.badgeColor!.withValues(alpha: 0.3)),
               ),
               child: Text(
                 feed.badgeLabel!,
@@ -684,9 +668,7 @@ class _SatpamCard extends StatelessWidget {
 
   String get _initials {
     final parts = satpam.namaLengkap.trim().split(' ');
-    if (parts.length >= 2) {
-      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-    }
+    if (parts.length >= 2) return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
     return parts[0].isNotEmpty ? parts[0][0].toUpperCase() : '?';
   }
 
@@ -699,50 +681,31 @@ class _SatpamCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 10, offset: const Offset(0, 3)),
         ],
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Avatar initials
           Container(
-            width: 52,
-            height: 52,
+            width: 52, height: 52,
             alignment: Alignment.center,
             decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              color: Color(0xFF1A4080),
-            ),
-            child: Text(
-              _initials,
-              style: GoogleFonts.inter(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
+              shape: BoxShape.circle, color: Color(0xFF1A4080)),
+            child: Text(_initials,
+                style: GoogleFonts.inter(
+                    fontSize: 18, fontWeight: FontWeight.bold,
+                    color: Colors.white)),
           ),
           const SizedBox(height: 8),
-          // Nama
-          Text(
-            satpam.namaLengkap,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: GoogleFonts.inter(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textDark,
-              height: 1.3,
-            ),
-          ),
+          Text(satpam.namaLengkap,
+              maxLines: 2, overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                  fontSize: 11, fontWeight: FontWeight.w600,
+                  color: AppColors.textDark, height: 1.3)),
           const SizedBox(height: 6),
-          // Badge bertugas
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
@@ -752,23 +715,15 @@ class _SatpamCard extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  width: 5,
-                  height: 5,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.green.shade600,
-                  ),
-                ),
+                Container(width: 5, height: 5,
+                    decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.green.shade600)),
                 const SizedBox(width: 3),
-                Text(
-                  'Bertugas',
-                  style: GoogleFonts.inter(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.green.shade700,
-                  ),
-                ),
+                Text('Bertugas',
+                    style: GoogleFonts.inter(
+                        fontSize: 9, fontWeight: FontWeight.w600,
+                        color: Colors.green.shade700)),
               ],
             ),
           ),
@@ -777,3 +732,4 @@ class _SatpamCard extends StatelessWidget {
     );
   }
 }
+

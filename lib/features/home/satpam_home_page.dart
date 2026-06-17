@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:audioplayers/audioplayers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/router/app_router.dart';
@@ -11,26 +10,35 @@ import '../../core/services/sos_service.dart';
 import '../../core/services/sos_notification_service.dart';
 import '../../core/services/bantuan_service.dart';
 import '../auth/auth_repository.dart';
+import '../security/data/security_repository.dart';
 import '../../shared/widgets/satpam_bottom_nav.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Model
+// Model — Activity Feed
 // ─────────────────────────────────────────────────────────────────────────────
-class _AktivitasItem {
-  const _AktivitasItem({
+class _FeedItem {
+  const _FeedItem({
     required this.icon,
     required this.iconBg,
     required this.iconColor,
     required this.label,
     required this.sublabel,
-    required this.waktu,
+    required this.dt,
   });
   final IconData icon;
-  final Color iconBg;
-  final Color iconColor;
-  final String label;
-  final String sublabel;
-  final String waktu;
+  final Color    iconBg;
+  final Color    iconColor;
+  final String   label;
+  final String   sublabel;
+  final DateTime dt;
+
+  String get waktu {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1)  return 'Baru saja';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} mnt lalu';
+    if (diff.inHours   < 24) return '${diff.inHours} jam lalu';
+    return '${diff.inDays} hari lalu';
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -82,41 +90,78 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
   int _tamuHariIni = 0;
   StreamSubscription<QuerySnapshot>? _tamuSub;
 
-  // ── Mock Aktivitas ────────────────────────────────────────────────────────
-  static const _mockAktivitas = [
-    _AktivitasItem(
-      icon: Icons.local_shipping_outlined,
-      iconBg: Color(0xFFE3F0FF),
-      iconColor: Color(0xFF1173D4),
-      label: 'Tamu Datang: Kurir',
-      sublabel: 'Blok B – G5',
-      waktu: '2 mnt lalu',
-    ),
-    _AktivitasItem(
-      icon: Icons.warning_amber_rounded,
-      iconBg: Color(0xFFFFF3E0),
-      iconColor: Color(0xFFE65100),
-      label: 'Kendaraan Menghalangi',
-      sublabel: 'Blok C – Area Parkir',
-      waktu: '15 mnt lalu',
-    ),
-    _AktivitasItem(
-      icon: Icons.check_circle_outline,
-      iconBg: Color(0xFFE8F5E9),
-      iconColor: Color(0xFF2E7D32),
-      label: 'Patroli Rutin Selesai',
-      sublabel: 'Area Barat – Gate 2',
-      waktu: '1 jam lalu',
-    ),
-    _AktivitasItem(
-      icon: Icons.person_add_outlined,
-      iconBg: Color(0xFFEDE7F6),
-      iconColor: Color(0xFF512DA8),
-      label: 'Tamu Dicatat: Keluarga',
-      sublabel: 'Blok D – No 3',
-      waktu: '2 jam lalu',
-    ),
-  ];
+  // ── Feed aktivitas terkini ────────────────────────────────────────────────
+  List<QueryDocumentSnapshot> _feedSosDocs     = [];
+  List<QueryDocumentSnapshot> _feedBantuanDocs = [];
+  List<QueryDocumentSnapshot> _feedPatroliDocs = [];
+  List<QueryDocumentSnapshot> _feedTamuDocs    = [];
+  StreamSubscription<QuerySnapshot>? _feedSosSub;
+  StreamSubscription<QuerySnapshot>? _feedBantuanSub;
+  StreamSubscription<QuerySnapshot>? _feedPatroliSub;
+  StreamSubscription<QuerySnapshot>? _feedTamuSub;
+
+  // ── Feed items getter — gabungkan 4 koleksi, sort by dt desc, limit 10 ──
+  List<_FeedItem> get _feedItems {
+    DateTime _ts(dynamic v) =>
+        v is Timestamp ? v.toDate() : DateTime.now();
+
+    final items = <_FeedItem>[];
+
+    for (final doc in _feedSosDocs) {
+      final d    = doc.data() as Map<String, dynamic>;
+      final type = d['type'] as String? ?? '';
+      final isSos = type.toUpperCase() == 'SOS';
+      items.add(_FeedItem(
+        icon      : isSos ? Icons.emergency_rounded : Icons.notifications_active_outlined,
+        iconBg    : isSos ? const Color(0xFFFFEBEE) : const Color(0xFFE3F0FF),
+        iconColor : isSos ? const Color(0xFFD32F2F) : const Color(0xFF1173D4),
+        label     : isSos ? 'SOS Darurat' : 'Panggil Satpam',
+        sublabel  : 'Blok ${d['blok'] ?? '-'} – ${d['namaWarga'] ?? '-'}',
+        dt        : _ts(d['createdAt']),
+      ));
+    }
+
+    for (final doc in _feedBantuanDocs) {
+      final d = doc.data() as Map<String, dynamic>;
+      items.add(_FeedItem(
+        icon      : Icons.support_agent_rounded,
+        iconBg    : const Color(0xFFFFF3E0),
+        iconColor : const Color(0xFFE65100),
+        label     : 'Bantuan: ${d['kategori'] ?? '-'}',
+        sublabel  : '${d['namaWarga'] ?? '-'} – Blok ${d['blok'] ?? '-'}',
+        dt        : _ts(d['createdAt']),
+      ));
+    }
+
+    for (final doc in _feedPatroliDocs) {
+      final d      = doc.data() as Map<String, dynamic>;
+      final status = d['status'] as String? ?? '';
+      final selesai = status == 'SELESAI';
+      items.add(_FeedItem(
+        icon      : selesai ? Icons.check_circle_outline : Icons.shield_outlined,
+        iconBg    : selesai ? const Color(0xFFE8F5E9) : const Color(0xFFE3F0FF),
+        iconColor : selesai ? const Color(0xFF2E7D32) : const Color(0xFF1173D4),
+        label     : selesai ? 'Patroli Selesai' : 'Patroli Dimulai',
+        sublabel  : '${d['blokPatroli'] ?? '-'} – ${d['namaSatpam'] ?? '-'}',
+        dt        : _ts(d['createdAt']),
+      ));
+    }
+
+    for (final doc in _feedTamuDocs) {
+      final d = doc.data() as Map<String, dynamic>;
+      items.add(_FeedItem(
+        icon      : Icons.person_add_outlined,
+        iconBg    : const Color(0xFFEDE7F6),
+        iconColor : const Color(0xFF512DA8),
+        label     : 'Tamu: ${d['namaTamu'] ?? '-'}',
+        sublabel  : 'Blok ${d['blokTujuan'] ?? '-'} – No. ${d['nomorRumahTujuan'] ?? '-'}',
+        dt        : _ts(d['createdAt']),
+      ));
+    }
+
+    items.sort((a, b) => b.dt.compareTo(a.dt));
+    return items.take(50).toList();
+  }
 
   @override
   void initState() {
@@ -127,18 +172,16 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
     _startListeningPatroli();
     _startListeningInsiden();
     _startListeningTamu();
+    _startListeningFeed();
   }
 
   // ── Load status isOnDuty dari Firestore ──────────────────────────────────
   Future<void> _loadDutyStatus() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = SecurityRepository.instance.currentSatpamUidOrNull;
     if (uid == null) { setState(() => _loadingDuty = false); return; }
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
-      final onDuty = (doc.data()?['isOnDuty'] as bool?) ?? false;
+      final data = await SecurityRepository.instance.fetchUser(uid);
+      final onDuty = (data?['isOnDuty'] as bool?) ?? false;
       if (mounted) setState(() { _isOnDuty = onDuty; _loadingDuty = false; });
     } catch (_) {
       if (mounted) setState(() => _loadingDuty = false);
@@ -147,14 +190,11 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
 
   // ── Toggle status bertugas ────────────────────────────────────────────────
   Future<void> _toggleDuty(bool value) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = SecurityRepository.instance.currentSatpamUidOrNull;
     if (uid == null || _savingDuty) return;
     setState(() { _savingDuty = true; _isOnDuty = value; });
     try {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .update({'isOnDuty': value});
+      await SecurityRepository.instance.setOnDuty(uid, value);
     } catch (_) {
       // Revert jika gagal
       if (mounted) setState(() => _isOnDuty = !value);
@@ -250,11 +290,7 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
 
   // ── Stream patroli aktif (semua satpam) ──────────────────────────────────
   void _startListeningPatroli() {
-    _patroliSub = FirebaseFirestore.instance
-        .collection('patroli')
-        .where('status', isEqualTo: 'AKTIF')
-        .snapshots()
-        .listen(
+    _patroliSub = SecurityRepository.instance.patroliAktifStream().listen(
           (snap) {
             if (mounted) setState(() => _activePatrols = snap.docs.length);
           },
@@ -264,11 +300,7 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
 
   // ── Stream insiden aktif (status == 'BARU') ──────────────────────────────
   void _startListeningInsiden() {
-    _insidenSub = FirebaseFirestore.instance
-        .collection('insiden')
-        .where('status', isEqualTo: 'BARU')
-        .snapshots()
-        .listen(
+    _insidenSub = SecurityRepository.instance.insidenBaruStream().listen(
           (snap) {
             if (mounted) setState(() => _insidenAktif = snap.docs.length);
           },
@@ -282,12 +314,7 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
     final start = DateTime(now.year, now.month, now.day);
     final end   = start.add(const Duration(days: 1));
 
-    _tamuSub = FirebaseFirestore.instance
-        .collection('catatantamu')
-        .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
-        .where('createdAt', isLessThan: Timestamp.fromDate(end))
-        .snapshots()
-        .listen(
+    _tamuSub = SecurityRepository.instance.tamuRentangStream(start, end).listen(
           (snap) {
             if (mounted) setState(() => _tamuHariIni = snap.docs.length);
           },
@@ -295,10 +322,31 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
         );
   }
 
+  // ── Stream feed aktivitas terkini ─────────────────────────────────────────
+  void _startListeningFeed() {
+    final repo = SecurityRepository.instance;
+
+    _feedSosSub = repo.sosTerbaruStream(limit: 5).listen((snap) {
+      if (mounted) setState(() => _feedSosDocs = snap.docs);
+    }, onError: (_) {});
+
+    _feedBantuanSub = repo.bantuanTerbaruStream(limit: 5).listen((snap) {
+      if (mounted) setState(() => _feedBantuanDocs = snap.docs);
+    }, onError: (_) {});
+
+    _feedPatroliSub = repo.patroliTerbaruStream(limit: 5).listen((snap) {
+      if (mounted) setState(() => _feedPatroliDocs = snap.docs);
+    }, onError: (_) {});
+
+    _feedTamuSub = repo.tamuTerbaruStream(limit: 5).listen((snap) {
+      if (mounted) setState(() => _feedTamuDocs = snap.docs);
+    }, onError: (_) {});
+  }
+
   Future<void> _onBantuanOnMyWay(BantuanRequest req) async {
     HapticFeedback.mediumImpact();
     await _bantuanPlayer.stop();
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = SecurityRepository.instance.currentSatpamUidOrNull;
     await BantuanService.updateStatus(
       requestId: req.id,
       status: BantuanStatus.onMyWay,
@@ -321,6 +369,10 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
     _patroliSub?.cancel();
     _insidenSub?.cancel();
     _tamuSub?.cancel();
+    _feedSosSub?.cancel();
+    _feedBantuanSub?.cancel();
+    _feedPatroliSub?.cancel();
+    _feedTamuSub?.cancel();
     _stopRinging();
     _audioPlayer.dispose();
     _bantuanPlayer.dispose();
@@ -331,7 +383,7 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
     HapticFeedback.heavyImpact();
     // Stop dering langsung tanpa tunggu Firestore callback
     _stopRinging();
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = SecurityRepository.instance.currentSatpamUidOrNull;
     await SosService.updateStatus(
       alertId: alert.id,
       status: SosStatus.onMyWay,
@@ -424,6 +476,10 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
                           activePatrols: _activePatrols,
                           tamuHariIni: _tamuHariIni,
                           insidenAktif: _insidenAktif,
+                          onTamuTap: () => Navigator.pushNamed(
+                              context, AppRouter.satpamDaftarTamu),
+                          onInsidenTap: () => Navigator.pushNamed(
+                              context, AppRouter.satpamInsiden),
                         ),
                       ),
 
@@ -451,7 +507,7 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
                       const SizedBox(height: 24),
 
                       // ── Recent Activity ──────────────────────────────
-                      _RecentActivitySection(items: _mockAktivitas),
+                      _RecentActivitySection(items: _feedItems),
 
                       const SizedBox(height: 8),
                     ],
@@ -506,7 +562,7 @@ class _TopBar extends StatelessWidget {
           // Avatar
           CircleAvatar(
             radius: 20,
-            backgroundColor: AppColors.primary.withOpacity(0.15),
+            backgroundColor: AppColors.primary.withValues(alpha: 0.15),
             backgroundImage: (photoUrl != null && photoUrl!.isNotEmpty)
                 ? NetworkImage(photoUrl!)
                 : null,
@@ -554,12 +610,12 @@ class _TopBar extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: isOnDuty
-                    ? activeColor.withOpacity(0.1)
+                    ? activeColor.withValues(alpha: 0.1)
                     : const Color(0xFFF1F5F9),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
                   color: isOnDuty
-                      ? activeColor.withOpacity(0.35)
+                      ? activeColor.withValues(alpha: 0.35)
                       : const Color(0xFFE2E8F0),
                 ),
               ),
@@ -592,9 +648,9 @@ class _TopBar extends StatelessWidget {
                         value            : isOnDuty,
                         onChanged        : isSaving ? null : onToggle,
                         activeColor      : activeColor,
-                        activeTrackColor : activeColor.withOpacity(0.3),
+                        activeTrackColor : activeColor.withValues(alpha: 0.3),
                         inactiveThumbColor : inactiveColor,
-                        inactiveTrackColor : inactiveColor.withOpacity(0.2),
+                        inactiveTrackColor : inactiveColor.withValues(alpha: 0.2),
                       ),
                     ),
                   ),
@@ -643,7 +699,7 @@ class _SosAlertCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: _shadowColor.withOpacity(0.3),
+            color: _shadowColor.withValues(alpha: 0.3),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),
@@ -659,7 +715,7 @@ class _SosAlertCard extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.25),
+                  color: Colors.white.withValues(alpha: 0.25),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Row(
@@ -685,7 +741,7 @@ class _SosAlertCard extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
@@ -711,7 +767,7 @@ class _SosAlertCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(Icons.location_on,
@@ -734,7 +790,7 @@ class _SosAlertCard extends StatelessWidget {
                       'Blok ${alert.blok} – Unit ${alert.nomorUnit}',
                       style: GoogleFonts.inter(
                         fontSize: 13,
-                        color: Colors.white.withOpacity(0.85),
+                        color: Colors.white.withValues(alpha: 0.85),
                       ),
                     ),
                   ],
@@ -856,7 +912,7 @@ class _BantuanRequestCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: _shadowColor.withOpacity(0.3),
+            color: _shadowColor.withValues(alpha: 0.3),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),
@@ -872,7 +928,7 @@ class _BantuanRequestCard extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.25),
+                  color: Colors.white.withValues(alpha: 0.25),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Row(
@@ -897,7 +953,7 @@ class _BantuanRequestCard extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
@@ -923,7 +979,7 @@ class _BantuanRequestCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(_kategoriIcon, color: Colors.white, size: 18),
@@ -945,7 +1001,7 @@ class _BantuanRequestCard extends StatelessWidget {
                       '${request.namaWarga}  •  Blok ${request.blok} – Unit ${request.nomorUnit}',
                       style: GoogleFonts.inter(
                         fontSize: 13,
-                        color: Colors.white.withOpacity(0.85),
+                        color: Colors.white.withValues(alpha: 0.85),
                       ),
                     ),
                   ],
@@ -961,7 +1017,7 @@ class _BantuanRequestCard extends StatelessWidget {
               padding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.15),
+                color: Colors.white.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
@@ -969,7 +1025,7 @@ class _BantuanRequestCard extends StatelessWidget {
                 children: [
                   Icon(Icons.notes_rounded,
                       size: 14,
-                      color: Colors.white.withOpacity(0.8)),
+                      color: Colors.white.withValues(alpha: 0.8)),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -978,7 +1034,7 @@ class _BantuanRequestCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.inter(
                         fontSize: 12,
-                        color: Colors.white.withOpacity(0.9),
+                        color: Colors.white.withValues(alpha: 0.9),
                         height: 1.4,
                       ),
                     ),
@@ -1036,7 +1092,7 @@ class _LaporanWargaCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFFE65100).withOpacity(0.3),
+              color: const Color(0xFFE65100).withValues(alpha: 0.3),
               blurRadius: 14,
               offset: const Offset(0, 5),
             ),
@@ -1047,7 +1103,7 @@ class _LaporanWargaCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(
@@ -1076,7 +1132,7 @@ class _LaporanWargaCard extends StatelessWidget {
                         : 'Tidak ada laporan aktif',
                     style: GoogleFonts.inter(
                       fontSize: 13,
-                      color: Colors.white.withOpacity(0.85),
+                      color: Colors.white.withValues(alpha: 0.85),
                     ),
                   ),
                 ],
@@ -1118,10 +1174,14 @@ class _StatsGrid extends StatelessWidget {
     required this.activePatrols,
     required this.tamuHariIni,
     required this.insidenAktif,
+    required this.onTamuTap,
+    required this.onInsidenTap,
   });
   final int activePatrols;
   final int tamuHariIni;
   final int insidenAktif;
+  final VoidCallback onTamuTap;
+  final VoidCallback onInsidenTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1151,6 +1211,7 @@ class _StatsGrid extends StatelessWidget {
                 value: '$tamuHariIni',
                 valueLabel: 'Orang',
                 valueColor: const Color(0xFF0D1B2A),
+                onTap: onTamuTap,
               ),
             ),
           ],
@@ -1167,6 +1228,7 @@ class _StatsGrid extends StatelessWidget {
           valueColor: insidenAktif > 0
               ? const Color(0xFFD32F2F)
               : const Color(0xFF2E7D32),
+          onTap: onInsidenTap,
         ),
       ],
     );
@@ -1182,6 +1244,7 @@ class _StatCard extends StatelessWidget {
     required this.value,
     required this.valueLabel,
     required this.valueColor,
+    this.onTap,
   });
   final IconData icon;
   final Color iconColor;
@@ -1190,17 +1253,18 @@ class _StatCard extends StatelessWidget {
   final String value;
   final String valueLabel;
   final Color valueColor;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final card = Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -1258,9 +1322,15 @@ class _StatCard extends StatelessWidget {
               ],
             ),
           ),
+          if (onTap != null)
+            const Icon(Icons.chevron_right_rounded,
+                size: 16, color: Color(0xFFB0BEC5)),
         ],
       ),
     );
+
+    if (onTap == null) return card;
+    return GestureDetector(onTap: onTap, child: card);
   }
 }
 
@@ -1364,7 +1434,7 @@ class _QuickActionPrimary extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: shadowColor.withOpacity(0.3),
+              color: shadowColor.withValues(alpha: 0.3),
               blurRadius: 14,
               offset: const Offset(0, 6),
             ),
@@ -1381,7 +1451,7 @@ class _QuickActionPrimary extends StatelessWidget {
                 height: 90,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white.withOpacity(0.07),
+                  color: Colors.white.withValues(alpha: 0.07),
                 ),
               ),
             ),
@@ -1393,7 +1463,7 @@ class _QuickActionPrimary extends StatelessWidget {
                 height: 60,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white.withOpacity(0.05),
+                  color: Colors.white.withValues(alpha: 0.05),
                 ),
               ),
             ),
@@ -1406,7 +1476,7 @@ class _QuickActionPrimary extends StatelessWidget {
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                     ),
                     child: Icon(icon, color: Colors.white, size: 26),
                   ),
@@ -1457,7 +1527,7 @@ class _QuickActionSecondary extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 10,
               offset: const Offset(0, 3),
             ),
@@ -1498,19 +1568,33 @@ class _QuickActionSecondary extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Recent Activity Section
+// Recent Activity Section — 5 teratas, expand untuk lihat semua
 // ─────────────────────────────────────────────────────────────────────────────
-class _RecentActivitySection extends StatelessWidget {
+class _RecentActivitySection extends StatefulWidget {
   const _RecentActivitySection({required this.items});
-  final List<_AktivitasItem> items;
+  final List<_FeedItem> items;
+
+  @override
+  State<_RecentActivitySection> createState() => _RecentActivitySectionState();
+}
+
+class _RecentActivitySectionState extends State<_RecentActivitySection> {
+  static const int _pageSize = 5;
+  bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {
+    final total    = widget.items.length;
+    final visible  = _expanded ? total : total.clamp(0, _pageSize);
+    final shown    = widget.items.take(visible).toList();
+    final remaining = total - _pageSize;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Header ──────────────────────────────────────────────────────
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -1522,44 +1606,111 @@ class _RecentActivitySection extends StatelessWidget {
                   color: const Color(0xFF0D1B2A),
                 ),
               ),
-              GestureDetector(
-                onTap: () {
-                  // TODO: navigasi ke semua aktivitas
-                },
-                child: Text(
-                  'LIHAT SEMUA',
+              if (total > 0)
+                Text(
+                  '$total aktivitas',
                   style: GoogleFonts.inter(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primary,
-                    letterSpacing: 0.3,
-                  ),
+                      fontSize: 12, color: const Color(0xFF94A3B8)),
                 ),
-              ),
             ],
           ),
           const SizedBox(height: 12),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
+
+          // ── Empty state ──────────────────────────────────────────────────
+          if (total == 0)
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4)),
+                ],
+              ),
+              child: Center(
+                child: Column(
+                  children: [
+                    Icon(Icons.history_rounded,
+                        size: 36, color: Colors.grey.shade300),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Belum ada aktivitas.',
+                      style: GoogleFonts.inter(
+                          fontSize: 13, color: const Color(0xFF94A3B8)),
+                    ),
+                  ],
                 ),
-              ],
+              ),
+            )
+          else
+            // ── List card ────────────────────────────────────────────────
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4)),
+                ],
+              ),
+              child: Column(
+                children: [
+                  ...List.generate(shown.length, (i) {
+                    final isLastItem = i == shown.length - 1 &&
+                        (_expanded || total <= _pageSize);
+                    return _AktivitasTile(
+                      item: shown[i],
+                      isLast: isLastItem,
+                    );
+                  }),
+
+                  // ── Footer expand / collapse ─────────────────────────
+                  if (total > _pageSize)
+                    GestureDetector(
+                      onTap: () => setState(() => _expanded = !_expanded),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          border: Border(
+                            top: BorderSide(
+                                color: Colors.grey.shade100, width: 1),
+                          ),
+                          borderRadius: const BorderRadius.vertical(
+                              bottom: Radius.circular(16)),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              _expanded
+                                  ? 'Sembunyikan'
+                                  : 'Lihat $remaining lainnya',
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(
+                              _expanded
+                                  ? Icons.keyboard_arrow_up_rounded
+                                  : Icons.keyboard_arrow_down_rounded,
+                              size: 18,
+                              color: AppColors.primary,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
-            child: Column(
-              children: List.generate(items.length, (i) {
-                return _AktivitasTile(
-                  item: items[i],
-                  isLast: i == items.length - 1,
-                );
-              }),
-            ),
-          ),
         ],
       ),
     );
@@ -1568,77 +1719,57 @@ class _RecentActivitySection extends StatelessWidget {
 
 class _AktivitasTile extends StatelessWidget {
   const _AktivitasTile({required this.item, required this.isLast});
-  final _AktivitasItem item;
+  final _FeedItem item;
   final bool isLast;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        InkWell(
-          onTap: () {
-            // TODO: detail aktivitas
-          },
-          borderRadius: BorderRadius.vertical(
-            top: Radius.zero,
-            bottom: isLast ? const Radius.circular(16) : Radius.zero,
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            child: Row(
-              children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: item.iconBg,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(item.icon, color: item.iconColor, size: 20),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: item.iconBg,
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.label,
+                child: Icon(item.icon, color: item.iconColor, size: 20),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(item.label,
                         style: GoogleFonts.inter(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
                           color: const Color(0xFF0D1B2A),
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        item.sublabel,
+                        )),
+                    const SizedBox(height: 2),
+                    Text(item.sublabel,
                         style: GoogleFonts.inter(
-                          fontSize: 12,
-                          color: const Color(0xFF94A3B8),
-                        ),
-                      ),
-                    ],
-                  ),
+                            fontSize: 12, color: const Color(0xFF94A3B8)),
+                        overflow: TextOverflow.ellipsis),
+                  ],
                 ),
-                Text(
-                  item.waktu,
+              ),
+              const SizedBox(width: 8),
+              Text(item.waktu,
                   style: GoogleFonts.inter(
-                    fontSize: 11,
-                    color: const Color(0xFF94A3B8),
-                  ),
-                ),
-              ],
-            ),
+                      fontSize: 11, color: const Color(0xFF94A3B8))),
+            ],
           ),
         ),
         if (!isLast)
-          Divider(
-            height: 1,
-            indent: 72,
-            endIndent: 16,
-            color: Colors.grey.shade100,
-          ),
+          Divider(height: 1, indent: 72, endIndent: 16,
+              color: Colors.grey.shade100),
       ],
     );
   }
 }
+

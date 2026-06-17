@@ -372,7 +372,7 @@ class _RegisterPageState extends State<RegisterPage> {
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
                         elevation: 0,
-                        disabledBackgroundColor: AppColors.primary.withOpacity(
+                        disabledBackgroundColor: AppColors.primary.withValues(alpha: 
                           0.6,
                         ),
                         shape: RoundedRectangleBorder(

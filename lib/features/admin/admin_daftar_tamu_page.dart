@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
 import 'widgets/admin_sidebar.dart';
 import 'widgets/admin_top_bar.dart';
+import 'data/admin_repository.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Model
@@ -132,17 +133,13 @@ class _AdminDaftarTamuPageState extends State<AdminDaftarTamuPage> {
   }
 
   void _startListening() {
-    _sub = FirebaseFirestore.instance
-        .collection('catatantamu')
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .listen((snap) {
+    _sub = AdminRepository.instance.tamuStream().listen((snap) {
       if (!mounted) return;
       setState(() {
         _allTamu = snap.docs
             .map((d) => _TamuModel.fromFirestore(
                   d.id,
-                  d.data() as Map<String, dynamic>,
+                  d.data(),
                 ))
             .toList();
         _loading = false;
@@ -158,22 +155,11 @@ class _AdminDaftarTamuPageState extends State<AdminDaftarTamuPage> {
     super.dispose();
   }
 
-  // ── Tandai Keluar ─────────────────────────────────────────────────────────
-  Future<void> _tandaiKeluar(String id) async {
-    await FirebaseFirestore.instance.collection('catatantamu').doc(id).update({
-      'status'      : 'KELUAR',
-      'waktuKeluar' : FieldValue.serverTimestamp(),
-    });
-  }
-
   // ── Detail dialog ─────────────────────────────────────────────────────────
   void _showDetail(BuildContext context, _TamuModel t) {
-    bool marking = false;
-
     showDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setS) => AlertDialog(
+      builder: (ctx) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           titlePadding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
           contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
@@ -279,53 +265,12 @@ class _AdminDaftarTamuPageState extends State<AdminDaftarTamuPage> {
           ),
           actions: [
             TextButton(
-              onPressed: marking ? null : () => Navigator.pop(ctx),
+              onPressed: () => Navigator.pop(ctx),
               child: Text('Tutup',
                   style: GoogleFonts.inter(color: AppColors.textGrey)),
             ),
-            if (t.status == 'MASUK')
-              ElevatedButton.icon(
-                onPressed: marking
-                    ? null
-                    : () async {
-                        setS(() => marking = true);
-                        try {
-                          await _tandaiKeluar(t.id);
-                          if (ctx.mounted) Navigator.pop(ctx);
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                  content: Text(
-                                      '${t.namaTamu} sudah dicatat keluar')),
-                            );
-                          }
-                        } catch (_) {
-                          setS(() => marking = false);
-                        }
-                      },
-                icon: const Icon(Icons.logout_rounded,
-                    size: 16, color: Colors.white),
-                label: marking
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white),
-                      )
-                    : Text('Tandai Keluar',
-                        style: GoogleFonts.inter(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF16A34A),
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8)),
-                ),
-              ),
           ],
         ),
-      ),
     );
   }
 
@@ -582,7 +527,7 @@ class _FilterBar extends StatelessWidget {
                       horizontal: 14, vertical: 7),
                   decoration: BoxDecoration(
                     color:
-                        isActive ? col.withOpacity(0.12) : Colors.white,
+                        isActive ? col.withValues(alpha: 0.12) : Colors.white,
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
                         color: isActive ? col : Colors.grey.shade300),
@@ -631,7 +576,6 @@ class _TamuTable extends StatelessWidget {
               Expanded(flex: 2, child: _Th('Kendaraan')),
               Expanded(flex: 2, child: _Th('Satpam')),
               Expanded(flex: 2, child: _Th('Waktu Masuk')),
-              Expanded(flex: 2, child: _Th('Status')),
               SizedBox(width: 80, child: _Th('Aksi')),
             ],
           ),
@@ -687,7 +631,7 @@ class _TamuRow extends StatelessWidget {
               children: [
                 CircleAvatar(
                   radius: 16,
-                  backgroundColor: AppColors.primary.withOpacity(0.1),
+                  backgroundColor: AppColors.primary.withValues(alpha: 0.1),
                   child: Text(
                     item.namaTamu.isNotEmpty
                         ? item.namaTamu[0].toUpperCase()
@@ -720,7 +664,7 @@ class _TamuRow extends StatelessWidget {
               padding: const EdgeInsets.symmetric(
                   horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.06),
+                color: AppColors.primary.withValues(alpha: 0.06),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
@@ -785,12 +729,6 @@ class _TamuRow extends StatelessWidget {
               style: GoogleFonts.inter(
                   fontSize: 12, color: AppColors.textGrey),
             ),
-          ),
-
-          // Status
-          Expanded(
-            flex: 2,
-            child: _StatusChip(status: item.status),
           ),
 
           // Aksi

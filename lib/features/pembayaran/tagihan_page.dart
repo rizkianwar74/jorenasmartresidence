@@ -119,7 +119,7 @@ class _TagihanAktifCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withOpacity(0.3),
+            color: AppColors.primary.withValues(alpha: 0.3),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),
@@ -133,7 +133,7 @@ class _TagihanAktifCard extends StatelessWidget {
               width: 160, height: 160,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.white.withOpacity(0.06),
+                color: Colors.white.withValues(alpha: 0.06),
               ),
             ),
           ),
@@ -143,7 +143,7 @@ class _TagihanAktifCard extends StatelessWidget {
               width: 100, height: 100,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.white.withOpacity(0.06),
+                color: Colors.white.withValues(alpha: 0.06),
               ),
             ),
           ),
@@ -163,7 +163,7 @@ class _TagihanAktifCard extends StatelessWidget {
                           style: GoogleFonts.inter(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: Colors.white.withOpacity(0.7),
+                            color: Colors.white.withValues(alpha: 0.7),
                             letterSpacing: 0.8,
                           ),
                         ),
@@ -182,7 +182,7 @@ class _TagihanAktifCard extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
+                        color: Colors.white.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
@@ -208,7 +208,7 @@ class _TagihanAktifCard extends StatelessWidget {
                       tagihan.namaResiden,
                       style: GoogleFonts.inter(
                           fontSize: 13,
-                          color: Colors.white.withOpacity(0.85)),
+                          color: Colors.white.withValues(alpha: 0.85)),
                     ),
                     const SizedBox(width: 16),
                     const Icon(Icons.apartment,
@@ -218,7 +218,7 @@ class _TagihanAktifCard extends StatelessWidget {
                       tagihan.unitLabel,
                       style: GoogleFonts.inter(
                           fontSize: 13,
-                          color: Colors.white.withOpacity(0.85)),
+                          color: Colors.white.withValues(alpha: 0.85)),
                     ),
                   ],
                 ),
@@ -245,7 +245,7 @@ class _TagihanAktifCard extends StatelessWidget {
                       'Jatuh tempo: ${tagihan.jatuhTempo}',
                       style: GoogleFonts.inter(
                           fontSize: 12,
-                          color: Colors.white.withOpacity(0.7)),
+                          color: Colors.white.withValues(alpha: 0.7)),
                     ),
                   ],
                 ),
@@ -257,7 +257,7 @@ class _TagihanAktifCard extends StatelessWidget {
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.15),
+                      color: Colors.white.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
@@ -323,7 +323,7 @@ class _RiwayatCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -335,7 +335,7 @@ class _RiwayatCard extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: Colors.green.withOpacity(0.1),
+              color: Colors.green.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(Icons.check_circle_outline,
@@ -399,7 +399,7 @@ class _RiwayatCard extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(
                     horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.1),
+                  color: Colors.green.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(

@@ -90,7 +90,7 @@ class _LoginPageState extends State<LoginPage> {
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.06),
+                            color: Colors.black.withValues(alpha: 0.06),
                             blurRadius: 20,
                             offset: const Offset(0, 4),
                           ),
@@ -222,7 +222,7 @@ class _LoginPageState extends State<LoginPage> {
                           foregroundColor: Colors.white,
                           elevation: 0,
                           disabledBackgroundColor: AppColors.primary
-                              .withOpacity(0.6),
+                              .withValues(alpha: 0.6),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
@@ -285,14 +285,14 @@ class _LoginPageState extends State<LoginPage> {
                         Icon(
                           Icons.shield_outlined,
                           size: 14,
-                          color: AppColors.textGrey.withOpacity(0.6),
+                          color: AppColors.textGrey.withValues(alpha: 0.6),
                         ),
                         const SizedBox(width: 6),
                         Text(
                           'Secured by EstateFlow Systems',
                           style: GoogleFonts.inter(
                             fontSize: 11,
-                            color: AppColors.textGrey.withOpacity(0.6),
+                            color: AppColors.textGrey.withValues(alpha: 0.6),
                           ),
                         ),
                       ],

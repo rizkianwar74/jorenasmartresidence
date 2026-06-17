@@ -56,7 +56,7 @@ class KantinPage extends StatelessWidget {
                         color: Colors.grey.shade100,
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.08),
+                            color: Colors.black.withValues(alpha: 0.08),
                             blurRadius: 20,
                             offset: const Offset(0, 8),
                           ),
@@ -82,7 +82,7 @@ class KantinPage extends StatelessWidget {
                             ),
                             // Overlay gelap
                             Container(
-                              color: Colors.black.withOpacity(0.35),
+                              color: Colors.black.withValues(alpha: 0.35),
                             ),
                             // Teks COMING SOON
                             Center(
@@ -115,7 +115,7 @@ class KantinPage extends StatelessWidget {
                           borderRadius: BorderRadius.circular(20),
                           boxShadow: [
                             BoxShadow(
-                              color: AppColors.primary.withOpacity(0.4),
+                              color: AppColors.primary.withValues(alpha: 0.4),
                               blurRadius: 8,
                               offset: const Offset(0, 3),
                             ),

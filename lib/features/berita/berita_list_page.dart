@@ -1,11 +1,10 @@
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/responsive_helper.dart';
-import '../admin/admin_berita_page.dart' show BeritaDoc;
+import '../admin/models/berita_doc.dart';
+import 'data/berita_repository.dart';
 import 'berita_detail_page.dart';
 
 class BeritaListPage extends StatefulWidget {
@@ -40,19 +39,7 @@ class _BeritaListPageState extends State<BeritaListPage> {
 
   Future<void> _loadBerita() async {
     try {
-      final snap = await FirebaseFirestore.instance
-          .collection('beritaacara')
-          .get();
-
-      final all = snap.docs.map(BeritaDoc.fromDoc).toList();
-      final published = all.where((b) => b.isPublished).toList()
-        ..sort((a, b) {
-          if (a.publishedAt == null && b.publishedAt == null) return 0;
-          if (a.publishedAt == null) return 1;
-          if (b.publishedAt == null) return -1;
-          return b.publishedAt!.compareTo(a.publishedAt!);
-        });
-
+      final published = await BeritaRepository.instance.fetchPublished();
       if (mounted) {
         setState(() {
           _beritaAll = published;
@@ -286,7 +273,7 @@ class _BeritaCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, 3),
             ),

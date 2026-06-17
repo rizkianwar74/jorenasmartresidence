@@ -3,10 +3,10 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/theme/app_colors.dart';
-import 'admin_berita_page.dart' show BeritaDoc;
+import 'data/admin_repository.dart';
+import 'models/berita_doc.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Kategori options
@@ -30,7 +30,7 @@ Future<void> showBeritaFormDialog(
 }) {
   return showDialog(
     context: context,
-    barrierColor: Colors.black.withOpacity(0.4),
+    barrierColor: Colors.black.withValues(alpha: 0.4),
     builder: (_) => _BeritaFormDialog(editDoc: editDoc),
   );
 }
@@ -119,9 +119,8 @@ class _BeritaFormDialogState extends State<_BeritaFormDialog> {
         imageUrl = 'data:image/jpeg;base64,$base64Str';
       }
 
-      // 2. Simpan/update ke Firestore collection 'beritaacara'
-      final uid  = FirebaseAuth.instance.currentUser?.uid ?? 'admin';
-      final col  = FirebaseFirestore.instance.collection('beritaacara');
+      // 2. Simpan/update lewat AdminRepository (akses Firestore terpusat)
+      final repo = AdminRepository.instance;
       final data = {
         'judul'      : _judulCtrl.text.trim(),
         'kategori'   : _kategori.toLowerCase(),
@@ -132,11 +131,11 @@ class _BeritaFormDialogState extends State<_BeritaFormDialog> {
       };
 
       if (_isEditMode) {
-        await col.doc(widget.editDoc!.id).update(data);
+        await repo.updateBerita(widget.editDoc!.id, data);
       } else {
-        await col.add({
+        await repo.createBerita({
           ...data,
-          'authorUid': uid,
+          'authorUid': repo.currentAdminUid,
           'viewCount': 0,
         });
       }
@@ -189,7 +188,7 @@ class _BeritaFormDialogState extends State<_BeritaFormDialog> {
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.12),
+                color: Colors.black.withValues(alpha: 0.12),
                 blurRadius: 32,
                 offset: const Offset(0, 8),
               ),
@@ -567,7 +566,7 @@ class _BeritaFormDialogState extends State<_BeritaFormDialog> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 5),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.55),
+                          color: Colors.black.withValues(alpha: 0.55),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(

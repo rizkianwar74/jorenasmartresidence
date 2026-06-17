@@ -394,7 +394,7 @@ class _ReportRow extends StatelessWidget {
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary.withOpacity(0.04) : Colors.white,
+          color: isSelected ? AppColors.primary.withValues(alpha: 0.04) : Colors.white,
           border: Border(top: BorderSide(color: Colors.grey.shade100)),
         ),
         child: IntrinsicHeight(
@@ -699,9 +699,9 @@ class _DetailPanelState extends State<_DetailPanel> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.05),
+                      color: AppColors.primary.withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppColors.primary.withOpacity(0.15)),
+                      border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
                     ),
                     child: Text(r.adminNote!,
                         style: GoogleFonts.inter(fontSize: 13, color: AppColors.primary, height: 1.5)),

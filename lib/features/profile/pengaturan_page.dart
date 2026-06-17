@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/theme/app_colors.dart';
 import '../auth/auth_repository.dart';
 
@@ -133,7 +132,7 @@ class _PengaturanPageState extends State<PengaturanPage> {
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.04),
+                      color: Colors.black.withValues(alpha: 0.04),
                       blurRadius: 12,
                       offset: const Offset(0, 4),
                     ),
@@ -448,36 +447,19 @@ class _PengaturanPageState extends State<PengaturanPage> {
                   : () async {
                       if (!formKey.currentState!.validate()) return;
                       setLocal(() => saving = true);
-                      try {
-                        final authUser =
-                            FirebaseAuth.instance.currentUser!;
-                        // Re-autentikasi dengan password lama
-                        final cred = EmailAuthProvider.credential(
-                          email   : authUser.email!,
-                          password: oldCtrl.text,
-                        );
-                        await authUser.reauthenticateWithCredential(cred);
-                        await authUser.updatePassword(newCtrl.text);
+                      final error = await AuthRepository.changePassword(
+                        oldCtrl.text,
+                        newCtrl.text,
+                      );
+                      if (error == null) {
                         if (ctx.mounted) {
                           Navigator.pop(ctx);
                           _showSnack(context, 'Password berhasil diubah',
                               success: true);
                         }
-                      } on FirebaseAuthException catch (e) {
+                      } else {
                         setLocal(() => saving = false);
-                        if (ctx.mounted) {
-                          String msg = 'Gagal mengubah password';
-                          if (e.code == 'wrong-password' ||
-                              e.code == 'invalid-credential') {
-                            msg = 'Password lama tidak sesuai';
-                          }
-                          _showSnack(context, msg);
-                        }
-                      } catch (e) {
-                        setLocal(() => saving = false);
-                        if (ctx.mounted) {
-                          _showSnack(context, 'Terjadi kesalahan: $e');
-                        }
+                        if (ctx.mounted) _showSnack(context, error);
                       }
                     },
               style: ElevatedButton.styleFrom(
@@ -546,7 +528,7 @@ class _SettingItem extends StatelessWidget {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.1),
+                color: AppColors.primary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(icon, color: AppColors.primary, size: 18),

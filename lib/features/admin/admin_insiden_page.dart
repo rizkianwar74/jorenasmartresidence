@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
 import 'widgets/admin_sidebar.dart';
 import 'widgets/admin_top_bar.dart';
+import 'data/admin_repository.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Model
@@ -109,17 +110,13 @@ class _AdminInsidenPageState extends State<AdminInsidenPage> {
   }
 
   void _startListening() {
-    _sub = FirebaseFirestore.instance
-        .collection('insiden')
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .listen((snap) {
+    _sub = AdminRepository.instance.insidenStream().listen((snap) {
       if (!mounted) return;
       setState(() {
         _allInsiden = snap.docs
             .map((d) => _InsidenModel.fromFirestore(
                   d.id,
-                  d.data() as Map<String, dynamic>,
+                  d.data(),
                 ))
             .toList();
         _loading = false;
@@ -137,10 +134,7 @@ class _AdminInsidenPageState extends State<AdminInsidenPage> {
 
   // ── Update status ─────────────────────────────────────────────────────────
   Future<void> _updateStatus(String id, String newStatus) async {
-    await FirebaseFirestore.instance.collection('insiden').doc(id).update({
-      'status'   : newStatus,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    await AdminRepository.instance.updateInsidenStatus(id, newStatus);
   }
 
   // ── Detail dialog ─────────────────────────────────────────────────────────
@@ -268,7 +262,7 @@ class _AdminInsidenPageState extends State<AdminInsidenPage> {
                               horizontal: 14, vertical: 8),
                           decoration: BoxDecoration(
                             color: isActive
-                                ? _statusColor(s).withOpacity(0.12)
+                                ? _statusColor(s).withValues(alpha: 0.12)
                                 : Colors.white,
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
@@ -629,7 +623,7 @@ class _FilterBar extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 14, vertical: 7),
                   decoration: BoxDecoration(
-                    color: isActive ? color.withOpacity(0.12) : Colors.white,
+                    color: isActive ? color.withValues(alpha: 0.12) : Colors.white,
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
                       color: isActive ? color : Colors.grey.shade300,

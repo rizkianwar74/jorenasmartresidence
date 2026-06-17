@@ -25,6 +25,8 @@ import '../../features/admin/admin_berita_page.dart';
 import '../../features/admin/admin_insiden_page.dart';
 import '../../features/admin/admin_daftar_tamu_page.dart';
 import '../../features/security/satpam_laporan_page.dart';
+import '../../features/security/satpam_daftar_tamu_page.dart';
+import '../../features/security/satpam_insiden_page.dart';
 
 class AppRouter {
   AppRouter._();
@@ -45,8 +47,10 @@ class AppRouter {
   static const String tagihan       = '/tagihan';
   static const String satpamPatroli   = '/satpam/patroli';
   static const String satpamReports   = '/satpam/reports';
-  static const String satpamCatatTamu = '/satpam/catat-tamu';
-  static const String satpamLaporan   = '/satpam/laporan';
+  static const String satpamCatatTamu  = '/satpam/catat-tamu';
+  static const String satpamLaporan    = '/satpam/laporan';
+  static const String satpamDaftarTamu = '/satpam/daftar-tamu';
+  static const String satpamInsiden    = '/satpam/insiden';
   static const String adminHome       = '/admin-home';
   static const String adminWargaUser  = '/admin/warga-user';
   static const String adminSecurity    = '/admin/security';
@@ -116,6 +120,10 @@ class AppRouter {
         return _slide(const SatpamCatatTamuPage(), settings);
       case satpamLaporan:
         return _slide(const SatpamLaporanPage(), settings);
+      case satpamDaftarTamu:
+        return _slide(const SatpamDaftarTamuPage(), settings);
+      case satpamInsiden:
+        return _slide(const SatpamInsidenPage(), settings);
       default:
         return _fade(const SplashScreen(), settings);
     }

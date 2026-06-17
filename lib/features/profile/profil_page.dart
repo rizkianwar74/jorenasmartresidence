@@ -13,7 +13,6 @@ import 'package:image_picker/image_picker.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/router/app_router.dart';
 import '../auth/auth_repository.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'widgets/profile_avatar.dart';
 import 'widgets/unit_info_card.dart';
 import 'widgets/personal_info_card.dart';
@@ -326,7 +325,7 @@ class _ProfilPageState extends State<ProfilPage> {
                       Positioned.fill(
                         child: Container(
                           decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.4),
+                            color: Colors.black.withValues(alpha: 0.4),
                             shape: BoxShape.circle,
                           ),
                           child: const Center(

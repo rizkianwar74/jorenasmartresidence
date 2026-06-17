@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -137,7 +136,7 @@ class _BantuanFormPageState extends State<BantuanFormPage> {
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
+                        color: Colors.black.withValues(alpha: 0.04),
                         blurRadius: 12,
                         offset: const Offset(0, 4),
                       ),
@@ -149,7 +148,7 @@ class _BantuanFormPageState extends State<BantuanFormPage> {
                         width: 52,
                         height: 52,
                         decoration: BoxDecoration(
-                          color: AppColors.primary.withOpacity(0.1),
+                          color: AppColors.primary.withValues(alpha: 0.1),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(widget.category.icon,
@@ -274,7 +273,7 @@ class _BantuanFormPageState extends State<BantuanFormPage> {
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
                                 color:
-                                    AppColors.primary.withOpacity(0.4),
+                                    AppColors.primary.withValues(alpha: 0.4),
                                 width: 1.5,
                               ),
                             ),
@@ -352,7 +351,7 @@ class _BantuanFormPageState extends State<BantuanFormPage> {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.06),
+                    color: AppColors.primary.withValues(alpha: 0.06),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
@@ -385,7 +384,7 @@ class _BantuanFormPageState extends State<BantuanFormPage> {
                       foregroundColor: Colors.white,
                       elevation: 0,
                       disabledBackgroundColor:
-                          AppColors.primary.withOpacity(0.5),
+                          AppColors.primary.withValues(alpha: 0.5),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14)),
                     ),

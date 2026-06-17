@@ -74,8 +74,38 @@ class AuthRepository {
   static AuthResult? get currentUser => _currentUser;
   static bool get isLoggedIn => _currentUser != null;
 
+  /// UID akun Firebase yang sedang login (null bila belum login).
+  static String? get currentUid => FirebaseAuth.instance.currentUser?.uid;
+
   // ── Logout — bersihkan in-memory session ──────────────────────────────────
   static void clearUser() => _currentUser = null;
+
+  // ── Ganti password (re-autentikasi + update) ─────────────────────────────
+  /// Mengembalikan `null` bila sukses, atau pesan error siap-tampil bila gagal.
+  static Future<String?> changePassword(
+    String oldPassword,
+    String newPassword,
+  ) async {
+    try {
+      final authUser = FirebaseAuth.instance.currentUser;
+      if (authUser?.email == null) return 'Sesi tidak valid. Silakan login ulang.';
+
+      final cred = EmailAuthProvider.credential(
+        email: authUser!.email!,
+        password: oldPassword,
+      );
+      await authUser.reauthenticateWithCredential(cred);
+      await authUser.updatePassword(newPassword);
+      return null;
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
+        return 'Password lama tidak sesuai';
+      }
+      return e.message ?? 'Gagal mengubah password';
+    } catch (e) {
+      return 'Terjadi kesalahan: $e';
+    }
+  }
 
   // ── Update field profil (in-memory + Firestore) ──────────────────────────
   static Future<void> updateProfile(String field, String value) async {

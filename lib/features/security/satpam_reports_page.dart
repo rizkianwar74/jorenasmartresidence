@@ -1,15 +1,13 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/router/app_router.dart';
 import '../../core/services/keluhan_service.dart';
 import '../../shared/widgets/satpam_bottom_nav.dart';
-import '../auth/auth_repository.dart';
+import 'data/security_repository.dart';
 
 class SatpamReportsPage extends StatefulWidget {
   const SatpamReportsPage({super.key});
@@ -131,7 +129,7 @@ class _KeluhanTabState extends State<_KeluhanTab>
   @override
   void initState() {
     super.initState();
-    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final uid = SecurityRepository.instance.currentSatpamUid;
     _sub = KeluhanService.watchAssignedKeluhan(uid).listen(
       (list) {
         if (mounted) setState(() { _items = list; _loading = false; });
@@ -190,7 +188,7 @@ class _KeluhanTabState extends State<_KeluhanTab>
     final ctrl = TextEditingController();
     final result = await showDialog<String>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14)),
         title: Text(title,
@@ -215,14 +213,14 @@ class _KeluhanTabState extends State<_KeluhanTab>
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, null),
+            onPressed: () => Navigator.pop(dialogCtx, null),
             child: Text('Batal',
                 style: GoogleFonts.inter(color: AppColors.textGrey)),
           ),
           ElevatedButton(
             onPressed: () {
               if (required && ctrl.text.trim().isEmpty) return;
-              Navigator.pop(context,
+              Navigator.pop(dialogCtx,
                   ctrl.text.trim().isEmpty ? null : ctrl.text.trim());
             },
             style: ElevatedButton.styleFrom(
@@ -361,7 +359,7 @@ class _FilterChip extends StatelessWidget {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
-          color: active ? c.withOpacity(0.1) : const Color(0xFFF4F6F9),
+          color: active ? c.withValues(alpha: 0.1) : const Color(0xFFF4F6F9),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: active ? c : Colors.transparent,
@@ -447,10 +445,10 @@ class _KeluhanCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-            color: _statusColor.withOpacity(0.15), width: 1.2),
+            color: _statusColor.withValues(alpha: 0.15), width: 1.2),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -464,7 +462,7 @@ class _KeluhanCard extends StatelessWidget {
             padding: const EdgeInsets.symmetric(
                 horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: _statusColor.withOpacity(0.06),
+              color: _statusColor.withValues(alpha: 0.06),
               borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(13)),
             ),
@@ -562,7 +560,7 @@ class _KeluhanCard extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 10, vertical: 7),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.06),
+                      color: AppColors.primary.withValues(alpha: 0.06),
                       borderRadius: BorderRadius.circular(7),
                     ),
                     child: Row(
@@ -657,9 +655,9 @@ class _ActionBtn extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 9),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withOpacity(0.3)),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -777,14 +775,11 @@ class _LaporInsidenTabState extends State<_LaporInsidenTab>
     setState(() => _saving = true);
 
     try {
-      final user      = FirebaseAuth.instance.currentUser;
-      final appUser   = AuthRepository.currentUser;
-      final satpamUid = user?.uid ?? '';
-      final namaSatpam = appUser?.namaLengkap.isNotEmpty == true
-          ? appUser!.namaLengkap
-          : (user?.displayName ?? 'Satpam');
+      final repo       = SecurityRepository.instance;
+      final satpamUid  = repo.currentSatpamUid;
+      final namaSatpam = repo.satpamDisplayName;
 
-      await FirebaseFirestore.instance.collection('insiden').add({
+      await repo.kirimInsiden({
         'satpamUid'   : satpamUid,
         'namaSatpam'  : namaSatpam,
         'kategori'    : _selectedKategori,
@@ -863,7 +858,7 @@ class _LaporInsidenTabState extends State<_LaporInsidenTab>
                             horizontal: 14, vertical: 10),
                         decoration: BoxDecoration(
                           color: isSelected
-                              ? AppColors.primary.withOpacity(0.08)
+                              ? AppColors.primary.withValues(alpha: 0.08)
                               : Colors.white,
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
@@ -1033,7 +1028,7 @@ class _LaporInsidenTabState extends State<_LaporInsidenTab>
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF1173D4),
                       disabledBackgroundColor:
-                          const Color(0xFF1173D4).withOpacity(0.6),
+                          const Color(0xFF1173D4).withValues(alpha: 0.6),
                       elevation: 0,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
@@ -1077,6 +1072,12 @@ class _TopBar extends StatelessWidget {
       ),
       child: Row(
         children: [
+          GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: const Icon(Icons.arrow_back_ios_new_rounded,
+                size: 20, color: Color(0xFF0D1B2A)),
+          ),
+          const SizedBox(width: 12),
           Icon(Icons.security, color: AppColors.primary, size: 20),
           const SizedBox(width: 8),
           Text(
@@ -1152,7 +1153,7 @@ class _HeroBanner extends StatelessWidget {
                   'Pastikan data yang diinput akurat dan objektif.',
                   style: GoogleFonts.inter(
                     fontSize: 12,
-                    color: Colors.white.withOpacity(0.8),
+                    color: Colors.white.withValues(alpha: 0.8),
                   ),
                 ),
               ],
@@ -1178,7 +1179,7 @@ class _FormCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),

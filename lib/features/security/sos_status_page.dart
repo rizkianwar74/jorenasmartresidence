@@ -231,7 +231,7 @@ class _SosStatusPageState extends State<SosStatusPage>
           color: const Color(0xFFF0FDF4),
           shape: BoxShape.circle,
           border: Border.all(
-              color: const Color(0xFF16A34A).withOpacity(0.3), width: 2),
+              color: const Color(0xFF16A34A).withValues(alpha: 0.3), width: 2),
         ),
         child: const Icon(Icons.check_rounded,
             size: 52, color: Color(0xFF16A34A)),
@@ -255,7 +255,7 @@ class _SosStatusPageState extends State<SosStatusPage>
                 height: 110,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: baseColor.withOpacity(0.1),
+                  color: baseColor.withValues(alpha: 0.1),
                 ),
               ),
             ),
@@ -265,7 +265,7 @@ class _SosStatusPageState extends State<SosStatusPage>
               height: 90,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: baseColor.withOpacity(0.15),
+                color: baseColor.withValues(alpha: 0.15),
               ),
             ),
             // Icon utama
@@ -364,7 +364,7 @@ class _SosStatusPageState extends State<SosStatusPage>
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.1),
+              color: AppColors.primary.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: const Icon(Icons.location_on_outlined,

@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/theme/app_colors.dart';
 import 'widgets/admin_sidebar.dart';
 import 'widgets/admin_top_bar.dart';
+import 'data/admin_repository.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Model
@@ -122,19 +123,13 @@ class _WargaUserPageState extends State<WargaUserPage> {
   }
 
   void _startListening() {
-    _sub = FirebaseFirestore.instance
-        .collection('users')
-        .where('role', isEqualTo: 'user')
-        .orderBy('blok')
-        .orderBy('nomorUnit')
-        .snapshots()
-        .listen((snap) {
+    _sub = AdminRepository.instance.wargaSortedStream().listen((snap) {
       if (!mounted) return;
       setState(() {
         _allWarga = snap.docs
             .map((d) => _AdminWargaModel.fromFirestore(
                   d.id,
-                  d.data() as Map<String, dynamic>,
+                  d.data(),
                 ))
             .toList();
         _loading = false;
@@ -166,11 +161,11 @@ class _WargaUserPageState extends State<WargaUserPage> {
     } else {
       data['komunitasRole'] = komunitasRole;
     }
-    await FirebaseFirestore.instance.collection('users').doc(uid).update(data);
+    await AdminRepository.instance.updateWarga(uid, data);
   }
 
   Future<void> _hapusWarga(String uid) async {
-    await FirebaseFirestore.instance.collection('users').doc(uid).delete();
+    await AdminRepository.instance.deleteWarga(uid);
   }
 
   // ── Dialogs ───────────────────────────────────────────────────────────────
@@ -837,7 +832,7 @@ class _WargaRow extends StatelessWidget {
               children: [
                 CircleAvatar(
                   radius: 20,
-                  backgroundColor: AppColors.primary.withOpacity(0.12),
+                  backgroundColor: AppColors.primary.withValues(alpha: 0.12),
                   child: Text(
                     warga.initials,
                     style: GoogleFonts.inter(
@@ -884,7 +879,7 @@ class _WargaRow extends StatelessWidget {
               padding:
                   const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.06),
+                color: AppColors.primary.withValues(alpha: 0.06),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
@@ -916,7 +911,7 @@ class _WargaRow extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.1),
+                      color: AppColors.primary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(

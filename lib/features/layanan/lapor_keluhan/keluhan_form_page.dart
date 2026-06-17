@@ -56,7 +56,7 @@ class _KeluhanFormPageState extends State<KeluhanFormPage> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
 
-    final result = await KeluhanService.sendKeluhan(
+    final (result, fotoErrors) = await KeluhanService.sendKeluhan(
       kategori  : widget.category.title,
       judul     : _judulController.text.trim(),
       deskripsi : _deskripsiController.text.trim(),
@@ -88,28 +88,56 @@ class _KeluhanFormPageState extends State<KeluhanFormPage> {
       Navigator.pop(context);   // keluhan_form_page
       Navigator.pop(context);   // kembali ke lapor_keluhan_page
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.check_circle, color: Colors.white, size: 18),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Laporan berhasil dikirim. Tim kami akan segera menindaklanjuti.',
-                  style: GoogleFonts.inter(fontSize: 13),
+      if (fotoErrors.isNotEmpty) {
+        // Laporan terkirim tapi ada foto yang gagal
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.warning_amber_rounded,
+                    color: Colors.white, size: 18),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Laporan terkirim, tapi ${fotoErrors.length} foto gagal diupload. '
+                    'Pastikan koneksi stabil dan coba lagi.',
+                    style: GoogleFonts.inter(fontSize: 13),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
+            backgroundColor: Colors.orange.shade700,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10)),
+            margin: const EdgeInsets.all(16),
+            duration: const Duration(seconds: 5),
           ),
-          backgroundColor: Colors.green.shade600,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10)),
-          margin: const EdgeInsets.all(16),
-          duration: const Duration(seconds: 4),
-        ),
-      );
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white, size: 18),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Laporan berhasil dikirim. Tim kami akan segera menindaklanjuti.',
+                    style: GoogleFonts.inter(fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.green.shade600,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10)),
+            margin: const EdgeInsets.all(16),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
     }
   }
 
@@ -152,7 +180,7 @@ class _KeluhanFormPageState extends State<KeluhanFormPage> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.07),
+                      color: AppColors.primary.withValues(alpha: 0.07),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
@@ -229,7 +257,7 @@ class _KeluhanFormPageState extends State<KeluhanFormPage> {
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
-                                  color: AppColors.primary.withOpacity(0.4),
+                                  color: AppColors.primary.withValues(alpha: 0.4),
                                   width: 1.5,
                                 ),
                               ),
@@ -310,7 +338,7 @@ class _KeluhanFormPageState extends State<KeluhanFormPage> {
                         foregroundColor: Colors.white,
                         elevation: 0,
                         disabledBackgroundColor:
-                            AppColors.primary.withOpacity(0.5),
+                            AppColors.primary.withValues(alpha: 0.5),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14)),
                       ),

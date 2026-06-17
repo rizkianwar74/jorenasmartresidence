@@ -5,7 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' show DateFormat;
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/responsive_helper.dart';
-import '../admin/admin_berita_page.dart' show BeritaDoc;
+import '../admin/models/berita_doc.dart';
 
 class BeritaDetailPage extends StatelessWidget {
   const BeritaDetailPage({super.key, required this.berita});
@@ -113,7 +113,7 @@ class BeritaDetailPage extends StatelessWidget {
                           CircleAvatar(
                             radius: 18,
                             backgroundColor:
-                                AppColors.primary.withOpacity(0.1),
+                                AppColors.primary.withValues(alpha: 0.1),
                             child: const Icon(Icons.person,
                                 color: AppColors.primary, size: 18),
                           ),
@@ -280,7 +280,7 @@ class _BulletItem extends StatelessWidget {
           width: 20,
           height: 20,
           decoration: BoxDecoration(
-            color: AppColors.primary.withOpacity(0.12),
+            color: AppColors.primary.withValues(alpha: 0.12),
             shape: BoxShape.circle,
           ),
           child: const Icon(Icons.check, size: 12, color: AppColors.primary),
@@ -307,7 +307,7 @@ class _TagChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: AppColors.primary.withOpacity(0.08),
+        color: AppColors.primary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(label,

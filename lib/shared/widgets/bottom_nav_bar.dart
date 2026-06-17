@@ -46,7 +46,7 @@ class BottomNavBar extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.8),
+            color: Colors.white.withValues(alpha: 0.8),
             border: Border(
               top: BorderSide(color: Colors.grey.shade200),
             ),

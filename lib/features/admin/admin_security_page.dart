@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
 import 'widgets/admin_sidebar.dart';
 import 'widgets/admin_top_bar.dart';
+import 'data/admin_repository.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Model Log Aktivitas (SOS + Bantuan)
@@ -51,10 +52,11 @@ class _LogItem {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _SatpamData {
-  const _SatpamData({required this.uid, required this.nama, this.lokasi = '-'});
+  const _SatpamData({required this.uid, required this.nama, this.lokasi = '-', this.isOnDuty = false});
   final String uid;
   final String nama;
   final String lokasi;
+  final bool isOnDuty;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -143,7 +145,7 @@ class AdminSecurityPage extends StatefulWidget {
 }
 
 class _AdminSecurityPageState extends State<AdminSecurityPage> {
-  final _db = FirebaseFirestore.instance;
+  final _repo = AdminRepository.instance;
 
   StreamSubscription<QuerySnapshot>? _sosSub;
   StreamSubscription<QuerySnapshot>? _bantuanSub;
@@ -166,43 +168,32 @@ class _AdminSecurityPageState extends State<AdminSecurityPage> {
   @override
   void initState() {
     super.initState();
-    final start = Timestamp.fromDate(_startOfToday);
+    final start = _startOfToday;
 
-    _sosSub = _db.collection('sosalert')
-        .where('createdAt', isGreaterThanOrEqualTo: start)
-        .snapshots()
-        .listen((snap) {
+    _sosSub = _repo.sosSejakStream(start).listen((snap) {
       if (mounted) setState(() { _sosDocs = snap.docs; _loading = false; });
     });
 
-    _bantuanSub = _db.collection('bantuanrequest')
-        .where('createdAt', isGreaterThanOrEqualTo: start)
-        .snapshots()
-        .listen((snap) {
+    _bantuanSub = _repo.bantuanSejakStream(start).listen((snap) {
       if (mounted) setState(() => _bantuanDocs = snap.docs);
     });
 
-    _satpamSub = _db.collection('users')
-        .where('role', isEqualTo: 'satpam')
-        .snapshots()
-        .listen((snap) {
+    _satpamSub = _repo.satpamStream().listen((snap) {
       if (!mounted) return;
       setState(() {
         _satpamList = snap.docs.map((doc) {
-          final d = doc.data() as Map<String, dynamic>;
+          final d = doc.data();
           final nama = (d['namaLengkap'] as String?)?.isNotEmpty == true
               ? d['namaLengkap'] as String
               : (d['username'] as String? ?? 'Satpam');
           return _SatpamData(uid: doc.id, nama: nama,
-              lokasi: d['lokasi'] as String? ?? '-');
+              lokasi: d['lokasi'] as String? ?? '-',
+              isOnDuty: d['isOnDuty'] as bool? ?? false);
         }).toList();
       });
     });
 
-    _patroliSub = _db.collection('patroli')
-        .where('createdAt', isGreaterThanOrEqualTo: start)
-        .snapshots()
-        .listen((snap) {
+    _patroliSub = _repo.patroliSejakStream(start).listen((snap) {
       if (!mounted) return;
       setState(() {
         _patroliLog = snap.docs.map(_PatroliItem.fromDoc).toList()
@@ -210,10 +201,7 @@ class _AdminSecurityPageState extends State<AdminSecurityPage> {
       });
     });
 
-    _patroliAktifSub = _db.collection('patroli')
-        .where('status', isEqualTo: 'AKTIF')
-        .snapshots()
-        .listen((snap) {
+    _patroliAktifSub = _repo.patroliAktifStream().listen((snap) {
       if (mounted) setState(() => _patroliAktif = snap.docs.length);
     });
   }
@@ -558,7 +546,7 @@ class _LogRow extends StatelessWidget {
               fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textDark))),
           Container(
             width: 28, height: 28,
-            decoration: BoxDecoration(color: typeColor.withOpacity(0.1), shape: BoxShape.circle),
+            decoration: BoxDecoration(color: typeColor.withValues(alpha: 0.1), shape: BoxShape.circle),
             child: Icon(typeIcon, size: 15, color: typeColor),
           ),
           const SizedBox(width: 8),
@@ -569,7 +557,7 @@ class _LogRow extends StatelessWidget {
           SizedBox(width: 110, child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: _statusColor.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
+              color: _statusColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(20)),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               Container(width: 6, height: 6,
                   decoration: BoxDecoration(color: _statusColor, shape: BoxShape.circle)),
@@ -589,7 +577,7 @@ class _LogRow extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.only(right: 4),
                     child: Icon(Icons.photo_outlined,
-                        size: 14, color: AppColors.primary.withOpacity(0.7)),
+                        size: 14, color: AppColors.primary.withValues(alpha: 0.7)),
                   ),
                 Icon(Icons.chevron_right, size: 18, color: Colors.grey.shade400),
               ],
@@ -710,7 +698,7 @@ class _PatroliRow extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.only(right: 4),
                     child: Icon(Icons.photo_outlined,
-                        size: 14, color: const Color(0xFF0D9488).withOpacity(0.8)),
+                        size: 14, color: const Color(0xFF0D9488).withValues(alpha: 0.8)),
                   ),
                 Icon(Icons.chevron_right, size: 18, color: Colors.grey.shade400),
               ],
@@ -773,7 +761,7 @@ class _LogDetailDialog extends StatelessWidget {
                       Container(
                         width: 40, height: 40,
                         decoration: BoxDecoration(
-                          color: col.withOpacity(0.1),
+                          color: col.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(10)),
                         child: Icon(icon, color: col, size: 20),
                       ),
@@ -876,7 +864,7 @@ class _PatroliDetailDialog extends StatelessWidget {
                       Container(
                         width: 40, height: 40,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF0D9488).withOpacity(0.1),
+                          color: const Color(0xFF0D9488).withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(10)),
                         child: const Icon(Icons.shield_outlined,
                             color: Color(0xFF0D9488), size: 20),
@@ -919,10 +907,10 @@ class _PatroliDetailDialog extends StatelessWidget {
                         children: item.quickTags.map((tag) => Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF0D9488).withOpacity(0.08),
+                            color: const Color(0xFF0D9488).withValues(alpha: 0.08),
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
-                                color: const Color(0xFF0D9488).withOpacity(0.3)),
+                                color: const Color(0xFF0D9488).withValues(alpha: 0.3)),
                           ),
                           child: Text(tag, style: GoogleFonts.inter(
                               fontSize: 12, color: const Color(0xFF0D9488),
@@ -1231,6 +1219,14 @@ class _SatpamBertugasSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final aktifCount = satpamList.where((s) => s.isOnDuty).length;
+    // Urutkan: aktif dulu, lalu non-aktif
+    final sorted = [...satpamList]
+      ..sort((a, b) {
+        if (a.isOnDuty == b.isOnDuty) return 0;
+        return a.isOnDuty ? -1 : 1;
+      });
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white, borderRadius: BorderRadius.circular(12),
@@ -1248,8 +1244,9 @@ class _SatpamBertugasSection extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                 decoration: BoxDecoration(
-                    color: AppColors.primary, borderRadius: BorderRadius.circular(20)),
-                child: Text('${satpamList.length} Aktif', style: GoogleFonts.inter(
+                    color: aktifCount > 0 ? AppColors.primary : Colors.grey.shade400,
+                    borderRadius: BorderRadius.circular(20)),
+                child: Text('$aktifCount Aktif', style: GoogleFonts.inter(
                     fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
               ),
             ]),
@@ -1261,32 +1258,48 @@ class _SatpamBertugasSection extends StatelessWidget {
                   style: GoogleFonts.inter(fontSize: 13, color: AppColors.textGrey)),
             )
           else
-            ...satpamList.map((s) => Container(
-              decoration: BoxDecoration(
-                  border: Border(top: BorderSide(color: Colors.grey.shade100))),
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-              child: Row(children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: AppColors.primary.withOpacity(0.12),
-                  child: Text(_initials(s.nama), style: GoogleFonts.inter(
-                      fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary)),
-                ),
-                const SizedBox(width: 10),
-                Expanded(child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(s.nama, style: GoogleFonts.inter(
-                        fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textDark)),
-                    if (s.lokasi != '-')
-                      Text(s.lokasi, style: GoogleFonts.inter(
-                          fontSize: 11, color: AppColors.textGrey)),
-                  ],
-                )),
-                Container(width: 8, height: 8,
-                    decoration: const BoxDecoration(color: Color(0xFF16A34A), shape: BoxShape.circle)),
-              ]),
-            )),
+            ...sorted.map((s) {
+              final avatarBg = s.isOnDuty
+                  ? AppColors.primary.withValues(alpha: 0.12)
+                  : Colors.grey.shade100;
+              final avatarText = s.isOnDuty ? AppColors.primary : Colors.grey.shade400;
+              final nameColor  = s.isOnDuty ? AppColors.textDark : AppColors.textGrey;
+              final dotColor   = s.isOnDuty
+                  ? const Color(0xFF16A34A)
+                  : Colors.grey.shade300;
+
+              return Container(
+                decoration: BoxDecoration(
+                    border: Border(top: BorderSide(color: Colors.grey.shade100))),
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                child: Row(children: [
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor: avatarBg,
+                    child: Text(_initials(s.nama), style: GoogleFonts.inter(
+                        fontSize: 12, fontWeight: FontWeight.bold, color: avatarText)),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(s.nama, style: GoogleFonts.inter(
+                          fontSize: 13, fontWeight: FontWeight.w600, color: nameColor)),
+                      Text(
+                        s.isOnDuty
+                            ? (s.lokasi != '-' ? s.lokasi : 'Sedang Bertugas')
+                            : 'Tidak Bertugas',
+                        style: GoogleFonts.inter(
+                            fontSize: 11,
+                            color: s.isOnDuty ? AppColors.textGrey : Colors.grey.shade400),
+                      ),
+                    ],
+                  )),
+                  Container(width: 8, height: 8,
+                      decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle)),
+                ]),
+              );
+            }),
           const SizedBox(height: 8),
         ],
       ),

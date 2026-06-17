@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_colors.dart';
 
 class NewsCard extends StatelessWidget {
   const NewsCard({
@@ -42,7 +42,7 @@ class NewsCard extends StatelessWidget {
                     color: Colors.grey.shade200,
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
+                        color: Colors.black.withValues(alpha: 0.1),
                         blurRadius: 4,
                         offset: const Offset(0, 2),
                       ),
@@ -69,7 +69,7 @@ class NewsCard extends StatelessWidget {
                           horizontal: 8,
                           vertical: 4,
                         ),
-                        color: Colors.white.withOpacity(0.9),
+                        color: Colors.white.withValues(alpha: 0.9),
                         child: Text(
                           category,
                           style: GoogleFonts.inter(

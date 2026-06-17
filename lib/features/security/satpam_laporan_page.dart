@@ -2,9 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/services/bantuan_service.dart';
+import 'data/security_repository.dart';
 
 class SatpamLaporanPage extends StatefulWidget {
   const SatpamLaporanPage({super.key});
@@ -46,7 +46,7 @@ class _SatpamLaporanPageState extends State<SatpamLaporanPage> {
 
   Future<void> _onMyWay(BantuanRequest req) async {
     HapticFeedback.mediumImpact();
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = SecurityRepository.instance.currentSatpamUidOrNull;
     await BantuanService.updateStatus(
       requestId: req.id,
       status: BantuanStatus.onMyWay,
@@ -262,10 +262,10 @@ class _LaporanCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _statusColor.withOpacity(0.2), width: 1.5),
+        border: Border.all(color: _statusColor.withValues(alpha: 0.2), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -278,7 +278,7 @@ class _LaporanCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
-              color: _statusColor.withOpacity(0.07),
+              color: _statusColor.withValues(alpha: 0.07),
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(14)),
             ),
@@ -316,7 +316,7 @@ class _LaporanCard extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: _statusColor.withOpacity(0.1),
+                        color: _statusColor.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Icon(_kategoriIcon,

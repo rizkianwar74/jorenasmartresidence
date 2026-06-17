@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/responsive_helper.dart';
 import '../../../core/services/keluhan_service.dart';
+import '../../auth/auth_repository.dart';
 import 'lapor_keluhan_page.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -29,7 +29,7 @@ class _RiwayatKeluhanPageState extends State<RiwayatKeluhanPage> {
   @override
   void initState() {
     super.initState();
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = AuthRepository.currentUid;
     if (uid == null) {
       setState(() => _loading = false);
       return;
@@ -221,7 +221,7 @@ class _RiwayatCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -293,7 +293,7 @@ class _RiwayatCard extends StatelessWidget {
               padding: const EdgeInsets.symmetric(
                   horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.06),
+                color: AppColors.primary.withValues(alpha: 0.06),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
@@ -523,10 +523,10 @@ class _DetailSheet extends StatelessWidget {
                 width: double.infinity,
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.06),
+                  color: AppColors.primary.withValues(alpha: 0.06),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                      color: AppColors.primary.withOpacity(0.15)),
+                      color: AppColors.primary.withValues(alpha: 0.15)),
                 ),
                 child: Text(
                   item.adminNote!,
@@ -661,7 +661,7 @@ class _BuatLaporanBanner extends StatelessWidget {
               height: 120,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.white.withOpacity(0.07),
+                color: Colors.white.withValues(alpha: 0.07),
               ),
             ),
           ),
@@ -673,7 +673,7 @@ class _BuatLaporanBanner extends StatelessWidget {
               height: 80,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.white.withOpacity(0.05),
+                color: Colors.white.withValues(alpha: 0.05),
               ),
             ),
           ),
@@ -693,7 +693,7 @@ class _BuatLaporanBanner extends StatelessWidget {
                 'Layanan kami tersedia 24/7 untuk\nmemastikan kenyamanan Anda di hunian ini.',
                 style: GoogleFonts.inter(
                   fontSize: 13,
-                  color: Colors.white.withOpacity(0.85),
+                  color: Colors.white.withValues(alpha: 0.85),
                   height: 1.5,
                 ),
               ),

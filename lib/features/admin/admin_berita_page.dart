@@ -2,65 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:intl/intl.dart' show DateFormat;
-import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../core/theme/app_colors.dart';
 import 'widgets/admin_sidebar.dart';
 import 'widgets/admin_top_bar.dart';
 import 'admin_berita_form_page.dart';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Model
-// ─────────────────────────────────────────────────────────────────────────────
-
-class BeritaDoc {
-  BeritaDoc({
-    required this.id,
-    required this.judul,
-    required this.kategori,
-    required this.konten,
-    required this.authorUid,
-    required this.imageUrl,
-    required this.isPublished,
-    required this.publishedAt,
-    required this.viewCount,
-  });
-
-  final String id;
-  final String judul;
-  final String kategori;
-  final String konten;
-  final String authorUid;
-  final String imageUrl;
-  final bool isPublished;
-  final DateTime? publishedAt;
-  final int viewCount;
-
-  factory BeritaDoc.fromDoc(DocumentSnapshot doc) {
-    final d = doc.data() as Map<String, dynamic>;
-    return BeritaDoc(
-      id          : doc.id,
-      judul       : (d['judul']     as String?) ?? '',
-      kategori    : (d['kategori']  as String?) ?? '',
-      konten      : (d['konten']    as String?) ?? '',
-      authorUid   : (d['authorUid'] as String?) ?? '',
-      imageUrl    : (d['imageUrl']  as String?) ?? '',
-      isPublished : (d['isPublished'] as bool?) ?? false,
-      publishedAt : (d['publishedAt'] as Timestamp?)?.toDate(),
-      viewCount   : (d['viewCount']  as int?)    ?? 0,
-    );
-  }
-
-  String get tanggalFormatted {
-    if (publishedAt == null) return '-';
-    return DateFormat('dd MMM yyyy').format(publishedAt!);
-  }
-
-  String get kategoriLabel =>
-      kategori.isNotEmpty
-          ? '${kategori[0].toUpperCase()}${kategori.substring(1)}'
-          : '-';
-}
+import 'data/admin_repository.dart';
+import 'models/berita_doc.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Page
@@ -77,8 +24,7 @@ class _AdminBeritaPageState extends State<AdminBeritaPage> {
   static const _perPage = 10;
   int _currentPage = 1;
 
-  final _col = FirebaseFirestore.instance
-      .collection('beritaacara');
+  final _repo = AdminRepository.instance;
 
   @override
   Widget build(BuildContext context) {
@@ -93,7 +39,7 @@ class _AdminBeritaPageState extends State<AdminBeritaPage> {
                 AdminTopBar(searchHint: 'Cari berita...'),
                 Expanded(
                   child: StreamBuilder<QuerySnapshot>(
-                    stream: _col.snapshots(),
+                    stream: _repo.beritaStream(),
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) {
                         return const Center(child: CircularProgressIndicator());
@@ -473,10 +419,7 @@ class _BeritaRowState extends State<_BeritaRow> {
     );
 
     if (confirm == true) {
-      await FirebaseFirestore.instance
-          .collection('beritaacara')
-          .doc(widget.item.id)
-          .delete();
+      await AdminRepository.instance.deleteBerita(widget.item.id);
       widget.onDeleted();
     }
   }
@@ -491,7 +434,7 @@ class _BeritaRowState extends State<_BeritaRow> {
       child: Container(
         decoration: BoxDecoration(
           color: _hovered
-              ? AppColors.primary.withOpacity(0.03)
+              ? AppColors.primary.withValues(alpha: 0.03)
               : Colors.white,
           border: Border(top: BorderSide(color: Colors.grey.shade100)),
         ),
@@ -618,7 +561,7 @@ class _BeritaRowState extends State<_BeritaRow> {
     return Container(
       width: 46,
       height: 36,
-      color: _kategoriColor(kategori).withOpacity(0.15),
+      color: _kategoriColor(kategori).withValues(alpha: 0.15),
       child: Icon(Icons.article_outlined,
           size: 18, color: _kategoriColor(kategori)),
     );
@@ -688,7 +631,7 @@ class _AksiBtn extends StatelessWidget {
         width: 30,
         height: 30,
         decoration: BoxDecoration(
-          color: color.withOpacity(0.08),
+          color: color.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(6),
         ),
         child: Icon(icon, size: 16, color: color),

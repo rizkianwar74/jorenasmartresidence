@@ -89,7 +89,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
             width: 64,
             height: 64,
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.1),
+              color: AppColors.primary.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(16),
             ),
             child: const Icon(
@@ -198,7 +198,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                 foregroundColor: Colors.white,
                 elevation: 0,
                 disabledBackgroundColor:
-                    AppColors.primary.withOpacity(0.6),
+                    AppColors.primary.withValues(alpha: 0.6),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -267,7 +267,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
             color: const Color(0xFFF0FDF4),
             shape: BoxShape.circle,
             border: Border.all(
-                color: const Color(0xFF16A34A).withOpacity(0.3), width: 2),
+                color: const Color(0xFF16A34A).withValues(alpha: 0.3), width: 2),
           ),
           child: const Icon(
             Icons.check_rounded,
@@ -326,7 +326,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
             color: const Color(0xFFFFFBEB),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-                color: const Color(0xFFF59E0B).withOpacity(0.4)),
+                color: const Color(0xFFF59E0B).withValues(alpha: 0.4)),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,

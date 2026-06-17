@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/router/app_router.dart';
 import '../../auth/auth_repository.dart';
@@ -167,8 +166,7 @@ class AdminTopBar extends StatelessWidget {
                   ),
                 );
                 if (confirm == true) {
-                  await FirebaseAuth.instance.signOut();
-                  AuthRepository.clearUser();
+                  await AuthRepository.logout();
                   if (context.mounted) {
                     Navigator.pushNamedAndRemoveUntil(
                       context,
@@ -229,7 +227,7 @@ class AdminTopBar extends StatelessWidget {
               children: [
                 CircleAvatar(
                   radius: 18,
-                  backgroundColor: AppColors.primary.withOpacity(0.15),
+                  backgroundColor: AppColors.primary.withValues(alpha: 0.15),
                   child: Text(
                     adminName.isNotEmpty ? adminName[0] : 'A',
                     style: GoogleFonts.inter(

@@ -1,9 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/app_colors.dart';
-import '../auth/auth_repository.dart';
+import 'data/security_repository.dart';
 
 class SatpamCatatTamuPage extends StatefulWidget {
   const SatpamCatatTamuPage({super.key});
@@ -77,13 +76,11 @@ class _SatpamCatatTamuPageState extends State<SatpamCatatTamuPage> {
     setState(() => _saving = true);
 
     try {
-      final uid        = FirebaseAuth.instance.currentUser?.uid ?? '';
-      final appUser    = AuthRepository.currentUser;
-      final namaSatpam = appUser?.namaLengkap.isNotEmpty == true
-          ? appUser!.namaLengkap
-          : (FirebaseAuth.instance.currentUser?.displayName ?? 'Satpam');
+      final repo       = SecurityRepository.instance;
+      final uid        = repo.currentSatpamUid;
+      final namaSatpam = repo.satpamDisplayName;
 
-      await FirebaseFirestore.instance.collection('catatantamu').add({
+      await repo.catatTamu({
         'namaTamu'          : _namaController.text.trim(),
         'jenisKendaraan'    : _jenisKendaraan,
         'nomorPlat'         : _platController.text.trim().toUpperCase(),
@@ -189,7 +186,7 @@ class _SatpamCatatTamuPageState extends State<SatpamCatatTamuPage> {
                             // Toggle segmented
                             Container(
                               decoration: BoxDecoration(
-                                color: AppColors.primary.withOpacity(0.08),
+                                color: AppColors.primary.withValues(alpha: 0.08),
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               padding: const EdgeInsets.all(4),
@@ -215,7 +212,7 @@ class _SatpamCatatTamuPageState extends State<SatpamCatatTamuPage> {
                                               ? [
                                                   BoxShadow(
                                                     color: Colors.black
-                                                        .withOpacity(0.08),
+                                                        .withValues(alpha: 0.08),
                                                     blurRadius: 6,
                                                     offset:
                                                         const Offset(0, 2),
@@ -274,7 +271,7 @@ class _SatpamCatatTamuPageState extends State<SatpamCatatTamuPage> {
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
-                                    color: AppColors.primary.withOpacity(0.4)),
+                                    color: AppColors.primary.withValues(alpha: 0.4)),
                               ),
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 12, vertical: 2),
@@ -317,7 +314,7 @@ class _SatpamCatatTamuPageState extends State<SatpamCatatTamuPage> {
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
-                                    color: AppColors.primary.withOpacity(0.4)),
+                                    color: AppColors.primary.withValues(alpha: 0.4)),
                               ),
                               child: TextField(
                                 controller: _keteranganController,
@@ -405,7 +402,7 @@ class _SatpamCatatTamuPageState extends State<SatpamCatatTamuPage> {
                   onPressed: _saving ? null : _simpan,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
-                    disabledBackgroundColor: AppColors.primary.withOpacity(0.6),
+                    disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.6),
                     elevation: 0,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
@@ -489,9 +486,9 @@ class _FormSection extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.primary.withOpacity(0.05),
+        color: AppColors.primary.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.primary.withOpacity(0.15)),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -561,7 +558,7 @@ class _StyledTextField extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.primary.withOpacity(0.5)),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.5)),
       ),
       child: TextField(
         controller: controller,

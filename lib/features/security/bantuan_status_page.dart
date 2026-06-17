@@ -227,7 +227,7 @@ class _BantuanStatusPageState extends State<BantuanStatusPage>
           color: const Color(0xFFF0FDF4),
           shape: BoxShape.circle,
           border: Border.all(
-              color: const Color(0xFF16A34A).withOpacity(0.3), width: 2),
+              color: const Color(0xFF16A34A).withValues(alpha: 0.3), width: 2),
         ),
         child: const Icon(Icons.check_rounded,
             size: 52, color: Color(0xFF16A34A)),
@@ -248,7 +248,7 @@ class _BantuanStatusPageState extends State<BantuanStatusPage>
                 height: 110,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: AppColors.primary.withOpacity(0.1),
+                  color: AppColors.primary.withValues(alpha: 0.1),
                 ),
               ),
             ),
@@ -257,7 +257,7 @@ class _BantuanStatusPageState extends State<BantuanStatusPage>
               height: 90,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: AppColors.primary.withOpacity(0.15),
+                color: AppColors.primary.withValues(alpha: 0.15),
               ),
             ),
             Container(
@@ -355,7 +355,7 @@ class _BantuanStatusPageState extends State<BantuanStatusPage>
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.1),
+                  color: AppColors.primary.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.support_agent_rounded,

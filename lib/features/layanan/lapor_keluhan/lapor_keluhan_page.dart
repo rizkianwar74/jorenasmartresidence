@@ -95,7 +95,7 @@ class LaporKeluhanPage extends StatelessWidget {
                           height: 220,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: Colors.white.withOpacity(0.07),
+                            color: Colors.white.withValues(alpha: 0.07),
                           ),
                         ),
                       ),
@@ -107,7 +107,7 @@ class LaporKeluhanPage extends StatelessWidget {
                           height: 170,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: Colors.white.withOpacity(0.07),
+                            color: Colors.white.withValues(alpha: 0.07),
                           ),
                         ),
                       ),
@@ -119,7 +119,7 @@ class LaporKeluhanPage extends StatelessWidget {
                           height: 110,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: Colors.white.withOpacity(0.05),
+                            color: Colors.white.withValues(alpha: 0.05),
                           ),
                         ),
                       ),
@@ -149,7 +149,7 @@ class LaporKeluhanPage extends StatelessWidget {
                               style: GoogleFonts.inter(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
-                                color: Colors.white.withOpacity(0.8),
+                                color: Colors.white.withValues(alpha: 0.8),
                                 letterSpacing: 1.4,
                               ),
                             ),
@@ -247,7 +247,7 @@ class _CategoryCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -259,7 +259,7 @@ class _CategoryCard extends StatelessWidget {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.08),
+                color: AppColors.primary.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(category.icon, color: AppColors.primary, size: 24),
@@ -315,7 +315,7 @@ class _RiwayatCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -327,7 +327,7 @@ class _RiwayatCard extends StatelessWidget {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.08),
+                color: AppColors.primary.withValues(alpha: 0.08),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.history_rounded,

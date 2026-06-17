@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/router/app_router.dart';
 import '../../shared/widgets/bottom_nav_bar.dart';
+import 'data/komunitas_repository.dart';
 import 'warga_model.dart';
 import 'widgets/blok_filter_chips.dart';
 import 'widgets/warga_list_item.dart';
@@ -25,7 +25,7 @@ class _KomunitasPageState extends State<KomunitasPage> {
 
   List<WargaModel> _allWarga = [];
   bool _loading = true;
-  StreamSubscription<QuerySnapshot>? _sub;
+  StreamSubscription? _sub;
 
   // ── Filter chips dinamis dari data ────────────────────────────────────────
   List<String> get _filterOptions {
@@ -51,20 +51,11 @@ class _KomunitasPageState extends State<KomunitasPage> {
   }
 
   void _startListening() {
-    _sub = FirebaseFirestore.instance
-        .collection('users')
-        .where('role', isEqualTo: 'user')
-        .orderBy('blok')
-        .orderBy('nomorUnit')
-        .snapshots()
-        .listen((snap) {
+    _sub = KomunitasRepository.instance.wargaStream().listen((snap) {
       if (!mounted) return;
       setState(() {
         _allWarga = snap.docs
-            .map((d) => WargaModel.fromFirestore(
-                  d.id,
-                  d.data() as Map<String, dynamic>,
-                ))
+            .map((d) => WargaModel.fromFirestore(d.id, d.data()))
             .toList();
         _loading = false;
       });
@@ -285,7 +276,7 @@ class _WargaDetailSheet extends StatelessWidget {
           // Avatar + nama
           CircleAvatar(
             radius: 36,
-            backgroundColor: AppColors.primary.withOpacity(0.15),
+            backgroundColor: AppColors.primary.withValues(alpha: 0.15),
             backgroundImage: warga.photoUrl != null
                 ? NetworkImage(warga.photoUrl!)
                 : null,
@@ -322,7 +313,7 @@ class _WargaDetailSheet extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.1),
+                color: AppColors.primary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
@@ -414,7 +405,7 @@ class _InfoRow extends StatelessWidget {
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            color: AppColors.primary.withOpacity(0.08),
+            color: AppColors.primary.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Icon(icon, color: AppColors.primary, size: 20),

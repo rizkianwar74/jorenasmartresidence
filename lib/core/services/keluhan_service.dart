@@ -128,30 +128,28 @@ class KeluhanService {
   static final _col     = FirebaseFirestore.instance.collection('keluhan');
   static final _storage = FirebaseStorage.instance;
 
-  // ── Upload satu foto, return download URL ─────────────────────────────────
-  static Future<String?> _uploadFoto(
+  // ── Upload satu foto, return download URL (throw on error) ───────────────
+  static Future<String> _uploadFoto(
     String uid,
     String docId,
     int index,
     Uint8List bytes,
   ) async {
-    try {
-      final ref = _storage
-          .ref()
-          .child('keluhan/$uid/$docId/foto_$index.jpg');
-      final task = await ref.putData(
-        bytes,
-        SettableMetadata(contentType: 'image/jpeg'),
-      );
-      return await task.ref.getDownloadURL();
-    } catch (e) {
-      debugPrint('[KeluhanService] upload foto error: $e');
-      return null;
-    }
+    final ref = _storage
+        .ref()
+        .child('keluhan/$uid/$docId/foto_$index.jpg');
+    final task = await ref.putData(
+      bytes,
+      SettableMetadata(contentType: 'image/jpeg'),
+    );
+    return task.ref.getDownloadURL();
   }
 
   // ── Kirim keluhan baru ────────────────────────────────────────────────────
-  static Future<KeluhanItem?> sendKeluhan({
+  /// Returns `(item, fotoErrors)`:
+  /// - `item` null bila gagal total
+  /// - `fotoErrors` berisi pesan error upload per foto (kosong = semua berhasil)
+  static Future<(KeluhanItem?, List<String>)> sendKeluhan({
     required String kategori,
     required String judul,
     required String deskripsi,
@@ -159,7 +157,7 @@ class KeluhanService {
   }) async {
     try {
       final firebaseUser = FirebaseAuth.instance.currentUser;
-      if (firebaseUser == null) return null;
+      if (firebaseUser == null) return (null, <String>[]);
 
       final uid = firebaseUser.uid;
       final m   = AuthRepository.currentUser;
@@ -174,7 +172,7 @@ class KeluhanService {
             .collection('users')
             .doc(uid)
             .get();
-        if (!doc.exists) return null;
+        if (!doc.exists) return (null, <String>[]);
         final d = doc.data()!;
         namaWarga = (d['namaLengkap'] as String?)?.isNotEmpty == true
             ? d['namaLengkap'] as String
@@ -199,19 +197,23 @@ class KeluhanService {
         'updatedAt' : null,
       });
 
-      // Upload foto jika ada
-      if (fotos.isNotEmpty) {
-        final urls = <String>[];
-        for (int i = 0; i < fotos.length; i++) {
+      // Upload foto jika ada — kumpulkan error per foto
+      final urls        = <String>[];
+      final fotoErrors  = <String>[];
+      for (int i = 0; i < fotos.length; i++) {
+        try {
           final url = await _uploadFoto(uid, ref.id, i, fotos[i]);
-          if (url != null) urls.add(url);
-        }
-        if (urls.isNotEmpty) {
-          await ref.update({'fotoUrls': urls});
+          urls.add(url);
+        } catch (e) {
+          debugPrint('[KeluhanService] upload foto[$i] error: $e');
+          fotoErrors.add('Foto ${i + 1}: $e');
         }
       }
+      if (urls.isNotEmpty) {
+        await ref.update({'fotoUrls': urls});
+      }
 
-      return KeluhanItem(
+      final item = KeluhanItem(
         id        : ref.id,
         uid       : uid,
         namaWarga : namaWarga,
@@ -222,10 +224,12 @@ class KeluhanService {
         deskripsi : deskripsi,
         status    : StatusKeluhan.menunggu,
         createdAt : DateTime.now(),
+        fotoUrls  : urls,
       );
+      return (item, fotoErrors);
     } catch (e) {
       debugPrint('[KeluhanService] sendKeluhan error: $e');
-      return null;
+      return (null, <String>[]);
     }
   }
 

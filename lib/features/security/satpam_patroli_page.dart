@@ -1,15 +1,11 @@
-import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/router/app_router.dart';
-import '../../features/auth/auth_repository.dart';
 import '../../shared/widgets/satpam_bottom_nav.dart';
+import 'data/security_repository.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // State enum
@@ -71,14 +67,9 @@ class _SatpamPatroliPageState extends State<SatpamPatroliPage> {
 
   // ── Cek apakah satpam ini punya patroli AKTIF ─────────────────────────────
   Future<void> _checkActivePatroli() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final uid = SecurityRepository.instance.currentSatpamUid;
     try {
-      final snap = await FirebaseFirestore.instance
-          .collection('patroli')
-          .where('satpamUid', isEqualTo: uid)
-          .where('status', isEqualTo: 'AKTIF')
-          .limit(1)
-          .get();
+      final snap = await SecurityRepository.instance.patroliAktifByUid(uid);
 
       if (!mounted) return;
 
@@ -86,7 +77,7 @@ class _SatpamPatroliPageState extends State<SatpamPatroliPage> {
         setState(() => _state = _PatroliState.idle);
       } else {
         final doc = snap.docs.first;
-        final d   = doc.data() as Map<String, dynamic>;
+        final d   = doc.data();
         setState(() {
           _state          = _PatroliState.active;
           _activeDocId    = doc.id;
@@ -118,15 +109,12 @@ class _SatpamPatroliPageState extends State<SatpamPatroliPage> {
     HapticFeedback.mediumImpact();
 
     try {
-      final user      = FirebaseAuth.instance.currentUser;
-      final appUser   = AuthRepository.currentUser;
-      final satpamUid = user?.uid ?? '';
-      final namaSatpam = appUser?.namaLengkap.isNotEmpty == true
-          ? appUser!.namaLengkap
-          : (user?.displayName ?? 'Satpam');
-      final jamMulai = _nowHHmm();
+      final repo       = SecurityRepository.instance;
+      final satpamUid  = repo.currentSatpamUid;
+      final namaSatpam = repo.satpamDisplayName;
+      final jamMulai   = _nowHHmm();
 
-      final docRef = await FirebaseFirestore.instance.collection('patroli').add({
+      final docRef = await repo.mulaiPatroli({
         'satpamUid'   : satpamUid,
         'namaSatpam'  : namaSatpam,
         'blokPatroli' : blok,
@@ -168,18 +156,16 @@ class _SatpamPatroliPageState extends State<SatpamPatroliPage> {
 
     try {
       final jamSelesai = _nowHHmm();
-      final satpamUid  = FirebaseAuth.instance.currentUser?.uid ?? '';
+      final repo       = SecurityRepository.instance;
+      final satpamUid  = repo.currentSatpamUid;
 
       // Upload foto jika ada
       List<String> fotoUrls = [];
       if (_fotos.isNotEmpty) {
-        fotoUrls = await _uploadFotos(satpamUid, _activeDocId!);
+        fotoUrls = await repo.uploadFotoPatroli(satpamUid, _activeDocId!, _fotos);
       }
 
-      await FirebaseFirestore.instance
-          .collection('patroli')
-          .doc(_activeDocId)
-          .update({
+      await repo.selesaiPatroli(_activeDocId!, {
         'status'     : 'SELESAI',
         'jamSelesai' : jamSelesai,
         'keterangan' : _keteranganController.text.trim(),
@@ -213,21 +199,8 @@ class _SatpamPatroliPageState extends State<SatpamPatroliPage> {
     }
   }
 
-  // ── Upload foto ke Storage ─────────────────────────────────────────────────
-  Future<List<String>> _uploadFotos(String uid, String docId) async {
-    final urls = <String>[];
-    for (int i = 0; i < _fotos.length; i++) {
-      try {
-        final ref = FirebaseStorage.instance
-            .ref()
-            .child('patroli/$uid/$docId/foto_$i.jpg');
-        final task = await ref.putData(
-            _fotos[i], SettableMetadata(contentType: 'image/jpeg'));
-        urls.add(await task.ref.getDownloadURL());
-      } catch (_) {}
-    }
-    return urls;
-  }
+  // Catatan: unggah foto patroli kini ditangani oleh
+  // SecurityRepository.uploadFotoPatroli().
 
   // ── Pilih foto dari galeri ─────────────────────────────────────────────────
   Future<void> _pickFoto() async {
@@ -352,7 +325,7 @@ class _SatpamPatroliPageState extends State<SatpamPatroliPage> {
             child: Container(
               width: 120, height: 120,
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.08),
+                color: AppColors.primary.withValues(alpha: 0.08),
                 shape: BoxShape.circle,
               ),
               child: Icon(Icons.shield_outlined, size: 56, color: AppColors.primary),
@@ -473,7 +446,7 @@ class _SatpamPatroliPageState extends State<SatpamPatroliPage> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text('AKTIF', style: GoogleFonts.inter(
@@ -710,6 +683,12 @@ class _TopBar extends StatelessWidget {
         left: 20, right: 20, bottom: 12,
       ),
       child: Row(children: [
+        GestureDetector(
+          onTap: () => Navigator.pop(context),
+          child: const Icon(Icons.arrow_back_ios_new_rounded,
+              size: 20, color: Color(0xFF0D1B2A)),
+        ),
+        const SizedBox(width: 12),
         Icon(Icons.security, color: AppColors.primary, size: 22),
         const SizedBox(width: 8),
         Text('SECURITY OPS', style: GoogleFonts.inter(
@@ -747,7 +726,7 @@ class _SectionCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.04),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 12, offset: const Offset(0, 4)),
         ],
       ),
