@@ -50,7 +50,10 @@ class AuthRepository {
   // Firebase Auth wajib pakai email — username dikonversi ke fake email internal
   static Future<AuthResult?> login(String username, String password) async {
     try {
-      final email = '${username.trim().toLowerCase()}@gmail.com';
+      // Gunakan email apa adanya jika sudah mengandung @, else tambah @gmail.com
+      final email = username.contains('@')
+          ? username.trim().toLowerCase()
+          : '${username.trim().toLowerCase()}@gmail.com';
 
       // 1. Login ke Firebase Auth
       final credential = await FirebaseAuth.instance

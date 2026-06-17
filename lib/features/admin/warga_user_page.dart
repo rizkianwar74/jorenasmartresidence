@@ -34,6 +34,7 @@ const _allResidents = [
     blok: 'Blok A',
     nomorUnit: '12',
     role: 'Ketua RT',
+    avatarUrl: 'https://i.pravatar.cc/150?u=budi',
   ),
   _ResidentData(
     nama: 'Siti Aminah',

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/bottom_nav_bar.dart';
 import '../../core/router/app_router.dart';
@@ -6,6 +7,8 @@ import '../../core/data/berita_data.dart';
 import '../auth/auth_repository.dart';
 import '../berita/berita_detail_page.dart';
 import '../berita/berita_list_page.dart';
+import '../pembayaran/payment_repository.dart';
+import '../pembayaran/tagihan_model.dart';
 import 'widgets/home_header.dart';
 import 'widgets/quick_action_card.dart';
 import 'widgets/news_carousel.dart';
@@ -15,7 +18,6 @@ class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
   static const double _contentMaxWidth = 600.0;
-  static const bool _sudahLunas = false;
 
   // Data berita dari berita_data.dart
   static final _beritaList = getBeritaTerbaru(limit: 3);
@@ -41,6 +43,7 @@ class HomePage extends StatelessWidget {
   Widget build(BuildContext context) {
     // Ambil data dari AuthRepository — sudah diisi saat login
     final user = AuthRepository.currentUser;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
     final namaDepan = user?.namaLengkap.split(' ').first ?? 'Pengguna';
     final namaLengkap = user?.namaLengkap ?? 'Pengguna';
     final blok = user?.blok ?? '-';
@@ -54,7 +57,26 @@ class HomePage extends StatelessWidget {
               constraints: const BoxConstraints(maxWidth: _contentMaxWidth),
               child: SingleChildScrollView(
                 padding: const EdgeInsets.only(bottom: 120),
-                child: Column(
+                child: StreamBuilder<List<TagihanModel>>(
+                  stream: uid == null
+                      ? Stream.value(const <TagihanModel>[])
+                      : PaymentRepository.watchUserTagihan(uid!),
+                  builder: (context, snap) {
+                    final list = snap.data ?? const <TagihanModel>[];
+                    final adaUnpaid =
+                        list.any((t) => t.status != StatusTagihan.lunas);
+                    // Sudah lunas = punya tagihan dan semua lunas.
+                    final sudahLunas = list.isNotEmpty && !adaUnpaid;
+                    final aktif = list.isEmpty
+                        ? null
+                        : (adaUnpaid
+                            ? list.firstWhere(
+                                (t) => t.status != StatusTagihan.lunas)
+                            : list.first);
+                    final jumlahFmt =
+                        aktif?.jumlahFormatted ?? 'Rp 450.000';
+
+                    return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     SizedBox(height: MediaQuery.of(context).padding.top),
@@ -74,12 +96,12 @@ class HomePage extends StatelessWidget {
                       ),
                       child: Row(
                         children: [
-                          // Kartu tagihan — nama dari database
+                          // Kartu tagihan — data dari Firestore
                           Expanded(
                             child: TagihanCard(
                               namaPenghuni: namaLengkap,
-                              jumlahTagihan: 'Rp 450.000',
-                              sudahLunas: _sudahLunas,
+                              jumlahTagihan: jumlahFmt,
+                              sudahLunas: sudahLunas,
                               onBayarTap: () {
                                 Navigator.pushNamed(
                                   context,
@@ -137,9 +159,13 @@ class HomePage extends StatelessWidget {
                     UnitStatusCard(
                       blockName: blok,
                       unitNumber: nomorUnit,
-                      paymentStatus: PaymentStatus.paid,
+                      paymentStatus: sudahLunas
+                          ? PaymentStatus.paid
+                          : PaymentStatus.unpaid,
                     ),
                   ],
+                    );
+                  },
                 ),
               ),
             ),

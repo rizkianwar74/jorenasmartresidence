@@ -65,6 +65,7 @@ const _mainNavItems = [
     page: AdminPage.billing,
     icon: Icons.account_balance_wallet_outlined,
     label: 'Billing',
+    route: AppRouter.adminBilling,
   ),
   _NavItemData(
     page: AdminPage.reports,
