@@ -248,12 +248,27 @@ class _SecurityPageState extends State<SecurityPage> {
     if (_isLoading) return;
     setState(() => _isLoading = true);
 
-    final alert = await SosService.sendSos();
+    // Cek satpam bertugas & kirim SOS sekaligus (paralel) supaya pengecekan
+    // ini tidak menambah delay pada alert darurat yang sudah ditahan 3 detik.
+    final results = await Future.wait([
+      SosService.hasSatpamOnDuty(),
+      SosService.sendSos(),
+    ]);
+    final hasOnDuty = results[0] as bool;
+    final alert = results[1] as SosAlert?;
+
     setState(() => _isLoading = false);
 
     if (!mounted) return;
 
     if (alert != null) {
+      if (!hasOnDuty) {
+        await _showNoSatpamOnDutyWarning(
+          'Permintaan SOS Anda tetap tersimpan dan akan segera diproses '
+          'begitu ada satpam yang online.',
+        );
+        if (!mounted) return;
+      }
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -275,6 +290,42 @@ class _SecurityPageState extends State<SecurityPage> {
         ),
       );
     }
+  }
+
+  // ── Warning: tidak ada satpam yang sedang bertugas ───────────────────────
+  Future<void> _showNoSatpamOnDutyWarning(String message) {
+    return showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text('Tidak Ada Satpam Bertugas',
+                  style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+        content: Text(message,
+            style: GoogleFonts.inter(fontSize: 14, height: 1.4)),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape:
+                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: Text('Mengerti',
+                style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override

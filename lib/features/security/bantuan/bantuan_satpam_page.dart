@@ -72,9 +72,24 @@ class BantuanSatpamPage extends StatelessWidget {
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(context);
-              final alert = await SosService.sendCall();
+              // Cek satpam bertugas & kirim panggilan sekaligus (paralel)
+              // supaya pengecekan ini tidak menambah delay.
+              final results = await Future.wait([
+                SosService.hasSatpamOnDuty(),
+                SosService.sendCall(),
+              ]);
+              final hasOnDuty = results[0] as bool;
+              final alert = results[1] as SosAlert?;
               if (!context.mounted) return;
               if (alert != null) {
+                if (!hasOnDuty) {
+                  await _showNoSatpamOnDutyWarning(
+                    context,
+                    'Panggilan Anda tetap tersimpan dan akan segera '
+                    'diproses begitu ada satpam yang online.',
+                  );
+                  if (!context.mounted) return;
+                }
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -105,6 +120,42 @@ class BantuanSatpamPage extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10)),
             ),
             child: Text('Panggil',
+                style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Warning: tidak ada satpam yang sedang bertugas ───────────────────────
+  Future<void> _showNoSatpamOnDutyWarning(BuildContext context, String message) {
+    return showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text('Tidak Ada Satpam Bertugas',
+                  style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+        content: Text(message,
+            style: GoogleFonts.inter(fontSize: 14, height: 1.4)),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape:
+                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: Text('Mengerti',
                 style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
           ),
         ],

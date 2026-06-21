@@ -1,13 +1,21 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/data/midtrans_service.dart';
+import '../auth/auth_repository.dart';
 import 'tagihan_model.dart';
+import 'payment_repository.dart';
 import 'payment_status_page.dart';
 
 class PaymentWebViewPage extends StatefulWidget {
-  const PaymentWebViewPage({super.key, required this.tagihan});
-  final TagihanModel tagihan;
+  const PaymentWebViewPage({super.key, required this.tagihanList});
+
+  /// Semua tagihan (bisa lebih dari 1 bulan tunggakan) yang dibayar
+  /// SEKALIGUS dalam satu transaksi Midtrans.
+  final List<TagihanModel> tagihanList;
 
   @override
   State<PaymentWebViewPage> createState() => _PaymentWebViewPageState();
@@ -16,14 +24,20 @@ class PaymentWebViewPage extends StatefulWidget {
 class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
   late final WebViewController _controller;
   bool _isLoading = true;
+  bool _resolved = false;
+  String _loadingMessage = 'Menghubungkan ke Midtrans...';
+  String? _snapUrl;
+  String? _orderId;
+  Timer? _pollTimer;
 
-  // TODO: Ganti dengan snap_token dari Cloud Functions
-  // final result = await FirebaseFunctions.instance
-  //     .httpsCallable('createTransaction')
-  //     .call({'order_id': widget.tagihan.id, 'amount': widget.tagihan.jumlah});
-  // final snapUrl = 'https://app.sandbox.midtrans.com/snap/v2/vtweb/${result.data['snap_token']}';
-  static const String _dummySnapUrl =
-      'https://app.sandbox.midtrans.com/snap/v2/vtweb/SNAP_TOKEN_PLACEHOLDER';
+  TagihanModel get _tertua => widget.tagihanList.first;
+  TagihanModel get _terbaru => widget.tagihanList.last;
+  List<String> get _ids => widget.tagihanList.map((t) => t.id).toList();
+  int get _totalJumlah =>
+      widget.tagihanList.fold(0, (sum, t) => sum + t.jumlah);
+  String get _periodeLabel => widget.tagihanList.length > 1
+      ? '${widget.tagihanList.length} Bulan Tertunggak'
+      : _tertua.periodeLabel;
 
   @override
   void initState() {
@@ -37,29 +51,149 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
           final url = req.url;
           if (url.contains('transaction_status=capture') ||
               url.contains('transaction_status=settlement')) {
-            _toStatus(PaymentResult.success);
+            _handleResult(PaymentResult.success);
             return NavigationDecision.prevent;
           }
           if (url.contains('transaction_status=deny') ||
               url.contains('transaction_status=cancel') ||
               url.contains('transaction_status=expire')) {
-            _toStatus(PaymentResult.failed);
+            _handleResult(PaymentResult.failed);
             return NavigationDecision.prevent;
           }
           if (url.contains('transaction_status=pending')) {
-            _toStatus(PaymentResult.pending);
+            _handleResult(PaymentResult.pending);
             return NavigationDecision.prevent;
           }
           return NavigationDecision.navigate;
         },
-      ))
-      ..loadRequest(Uri.parse(_dummySnapUrl));
+      ));
+    _initPayment();
   }
 
-  void _toStatus(PaymentResult result) {
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _initPayment() async {
+    final orderId = 'IUR-${DateTime.now().millisecondsSinceEpoch}';
+    _orderId = orderId;
+
+    try {
+      await PaymentRepository.setOrderIdForMany(
+        tagihanIds: _ids,
+        orderId: orderId,
+      );
+    } catch (_) {
+      // Tidak fatal — lanjutkan request Snap walau gagal set orderId.
+    }
+
+    final url = await MidtransService.getSnapRedirectUrl(
+      orderId: orderId,
+      amount: _totalJumlah,
+      nama: _tertua.namaResiden,
+      phone: _tertua.nomorHp,
+      email: AuthRepository.currentUser?.email,
+    );
+
+    if (!mounted) return;
+
+    if (url == null) {
+      setState(() {
+        _loadingMessage =
+            'Gagal terhubung ke Midtrans. Periksa Server Key di midtrans_config.dart.';
+      });
+      return;
+    }
+
+    setState(() => _snapUrl = url);
+    _controller.loadRequest(Uri.parse(url));
+
+    // Banyak metode bayar Midtrans (GoPay, QRIS, transfer VA) TIDAK pernah
+    // me-redirect webview ini ke URL finish — user menyelesaikan pembayaran
+    // di app/HP lain. Tanpa redirect, onNavigationRequest di atas tidak akan
+    // pernah terpicu, sehingga status tidak pernah ter-update otomatis.
+    // Untuk menutup gap itu, polling status transaksi secara berkala ke
+    // Midtrans selama halaman ini masih terbuka.
+    _pollTimer = Timer.periodic(const Duration(seconds: 4), (_) async {
+      if (_resolved) {
+        _pollTimer?.cancel();
+        return;
+      }
+      try {
+        final status = await MidtransService.verifyStatus(orderId);
+        if (MidtransService.isPaid(status)) {
+          await _handleResult(PaymentResult.success);
+        } else if (status == 'deny' ||
+            status == 'cancel' ||
+            status == 'expire') {
+          await _handleResult(PaymentResult.failed);
+        }
+        // status == 'pending' (atau null/belum ada transaksi) -> terus polling.
+      } catch (_) {
+        // Abaikan kegagalan satu kali polling, coba lagi di tick berikutnya.
+      }
+    });
+  }
+
+  Future<void> _handleResult(PaymentResult resultFromUrl) async {
+    if (_resolved) return;
+    _resolved = true;
+    _pollTimer?.cancel();
+
+    var result = resultFromUrl;
+
+    try {
+      final orderId = _orderId;
+      if (orderId != null) {
+        final status = await MidtransService.verifyStatus(orderId);
+        if (MidtransService.isPaid(status)) {
+          result = PaymentResult.success;
+        } else if (status == 'pending') {
+          result = PaymentResult.pending;
+        } else if (status != null) {
+          result = PaymentResult.failed;
+        }
+      }
+
+      if (result == PaymentResult.success) {
+        // Lunaskan SEMUA bulan tunggakan sekaligus dalam satu batch.
+        await PaymentRepository.markManyAsLunas(
+          tagihanIds: _ids,
+          metodeBayar: 'Midtrans',
+          orderId: _orderId,
+        );
+      }
+    } catch (_) {
+      // Biarkan navigasi ke status page walau update Firestore gagal.
+    }
+
+    if (!mounted) return;
+
+    // Gabungkan semua tagihan yang dibayar jadi satu model representatif
+    // (jumlah dijumlah, periode digabung) untuk ditampilkan di status page.
+    final combined = TagihanModel(
+      id: _tertua.id,
+      bulan: widget.tagihanList.length > 1 ? _periodeLabel : _tertua.bulan,
+      bulanIndex: _tertua.bulanIndex,
+      tahun: _terbaru.tahun,
+      namaResiden: _tertua.namaResiden,
+      blok: _tertua.blok,
+      nomorUnit: _tertua.nomorUnit,
+      jumlah: _totalJumlah,
+      jatuhTempo: _tertua.jatuhTempo,
+      status: result == PaymentResult.success
+          ? StatusTagihan.lunas
+          : result == PaymentResult.pending
+              ? StatusTagihan.pending
+              : StatusTagihan.belumBayar,
+      userId: _tertua.userId,
+      nomorHp: _tertua.nomorHp,
+    );
+
     Navigator.pushReplacement(context, MaterialPageRoute(
-      builder: (_) =>
-          PaymentStatusPage(tagihan: widget.tagihan, result: result),
+      builder: (_) => PaymentStatusPage(tagihan: combined, result: result),
     ));
   }
 
@@ -93,6 +227,8 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
 
   @override
   Widget build(BuildContext context) {
+    final hasUrl = _snapUrl != null;
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -111,7 +247,7 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                     color: AppColors.textDark)),
-            Text(widget.tagihan.periodeLabel,
+            Text(_periodeLabel,
                 style:
                     GoogleFonts.inter(fontSize: 12, color: AppColors.textGrey)),
           ],
@@ -134,21 +270,25 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
       ),
       body: Stack(
         children: [
-          WebViewWidget(controller: _controller),
-          if (_isLoading)
+          if (hasUrl) WebViewWidget(controller: _controller),
+          if (!hasUrl || _isLoading)
             Container(
               color: Colors.white,
               child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const CircularProgressIndicator(
-                        color: AppColors.primary, strokeWidth: 2.5),
-                    const SizedBox(height: 16),
-                    Text('Memuat halaman pembayaran...',
-                        style: GoogleFonts.inter(
-                            fontSize: 14, color: AppColors.textGrey)),
-                  ],
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const CircularProgressIndicator(
+                          color: AppColors.primary, strokeWidth: 2.5),
+                      const SizedBox(height: 16),
+                      Text(_loadingMessage,
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.inter(
+                              fontSize: 14, color: AppColors.textGrey)),
+                    ],
+                  ),
                 ),
               ),
             ),

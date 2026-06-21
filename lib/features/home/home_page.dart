@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/services/bantuan_service.dart';
 import '../../shared/widgets/bottom_nav_bar.dart';
@@ -12,6 +13,8 @@ import '../berita/data/berita_repository.dart';
 import 'data/home_repository.dart';
 import '../berita/berita_detail_page.dart';
 import '../berita/berita_list_page.dart';
+import '../pembayaran/payment_repository.dart';
+import '../pembayaran/tagihan_model.dart';
 import 'widgets/home_header.dart';
 import 'widgets/quick_action_card.dart';
 import 'widgets/news_carousel.dart';
@@ -26,7 +29,6 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   static const double _contentMaxWidth = 600.0;
-  static const bool _sudahLunas = false;
 
   StreamSubscription<BantuanRequest?>? _bantuanSub;
   BantuanRequest? _activeBantuan;
@@ -54,6 +56,27 @@ class _HomePageState extends State<HomePage> {
     _startListeningBantuan();
     _loadBerita();
     _startListeningFeed();
+    _ensureTagihanBulanIni();
+  }
+
+  /// Auto-generate tagihan bulan ini (sekali per bulan per user) saat home
+  /// dibuka — aman dipanggil berulang, skip kalau sudah ada. Tagihan bulan
+  /// lalu yang belum lunas tidak diubah; tetap jadi tunggakan terpisah.
+  Future<void> _ensureTagihanBulanIni() async {
+    final uid = AuthRepository.currentUid;
+    final user = AuthRepository.currentUser;
+    if (uid == null || user == null) return;
+    try {
+      await PaymentRepository.ensureCurrentMonthTagihan(
+        userId: uid,
+        namaResiden: user.namaLengkap,
+        nomorHp: user.nomorHp,
+        blok: user.blok,
+        nomorUnit: user.nomorUnit,
+      );
+    } catch (e) {
+      debugPrint('[HomeTagihan] gagal ensure tagihan bulan ini: $e');
+    }
   }
 
   void _startListeningBantuan() {
@@ -305,6 +328,7 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final user = AuthRepository.currentUser;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
     final namaDepan = user?.namaLengkap.split(' ').first ?? 'Pengguna';
     final namaLengkap = user?.namaLengkap ?? 'Pengguna';
     final blok = user?.blok ?? '-';
@@ -316,111 +340,130 @@ class _HomePageState extends State<HomePage> {
           Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: _contentMaxWidth),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.only(bottom: 120),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(height: MediaQuery.of(context).padding.top),
+              child: StreamBuilder<List<TagihanModel>>(
+                stream: uid == null
+                    ? Stream.value(const <TagihanModel>[])
+                    : PaymentRepository.watchUserTagihan(uid),
+                builder: (context, tagihanSnap) {
+                  final list = tagihanSnap.data ?? const <TagihanModel>[];
+                  final unpaid = list.unpaidSorted;
+                  final adaUnpaid = unpaid.isNotEmpty;
+                  final sudahLunas = list.isNotEmpty && !adaUnpaid;
+                  // Total tunggakan = jumlah semua bulan yang belum lunas
+                  // (bertambah kalau bulan sebelumnya belum dibayar).
+                  final jumlahFmt = adaUnpaid
+                      ? formatRupiah(list.totalUnpaid)
+                      : formatRupiah(PaymentRepository.iuranBulanan);
 
-                    HomeHeader(
-                      userName: namaDepan,
-                      greeting: _buildGreeting(),
-                    ),
+                  return SingleChildScrollView(
+                    padding: const EdgeInsets.only(bottom: 120),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(height: MediaQuery.of(context).padding.top),
 
-                    // ── Kartu status bantuan aktif ─────────────────────────
-                    if (_activeBantuan != null)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
-                        child: _ActiveBantuanCard(
-                          request: _activeBantuan!,
-                          onCancel: () =>
-                              _cancelBantuan(_activeBantuan!.id),
+                        HomeHeader(
+                          userName: namaDepan,
+                          greeting: _buildGreeting(),
                         ),
-                      ),
 
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 24, vertical: 6),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: TagihanCard(
-                              namaPenghuni: namaLengkap,
-                              jumlahTagihan: 'Rp 450.000',
-                              sudahLunas: _sudahLunas,
-                              onBayarTap: () =>
-                                  Navigator.pushNamed(context, AppRouter.tagihan),
+                        // ── Kartu status bantuan aktif ─────────────────────
+                        if (_activeBantuan != null)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+                            child: _ActiveBantuanCard(
+                              request: _activeBantuan!,
+                              onCancel: () =>
+                                  _cancelBantuan(_activeBantuan!.id),
                             ),
                           ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: QuickActionCard(
-                              icon: Icons.security,
-                              iconColor: Colors.red,
-                              bgIconColor: Colors.red.shade50,
-                              title: 'Panggil Satpam',
-                              subtitle: 'RESPON CEPAT',
-                              onTap: () => Navigator.pushNamed(
-                                  context, AppRouter.security),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
 
-                    _beritaLoading
-                        ? const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 32),
-                            child: Center(
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2)),
-                          )
-                        : _beritaList.isEmpty
-                            ? const SizedBox.shrink()
-                            : NewsCarousel(
-                                items: _beritaList
-                                    .map((b) => NewsItem(
-                                          imageUrl: b.imageUrl,
-                                          category: b.kategori,
-                                          title: b.judul,
-                                          date: b.tanggalFormatted,
-                                        ))
-                                    .toList(),
-                                onSeeAllTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                        builder: (_) =>
-                                            const BeritaListPage()),
-                                  );
-                                },
-                                onNewsTap: (item) {
-                                  final index = _beritaList.indexWhere(
-                                      (b) => b.judul == item.title);
-                                  if (index != -1) {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => BeritaDetailPage(
-                                                berita: _beritaList[index]),
-                                      ),
-                                    );
-                                  }
-                                },
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 24, vertical: 6),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: TagihanCard(
+                                  namaPenghuni: namaLengkap,
+                                  jumlahTagihan: jumlahFmt,
+                                  sudahLunas: sudahLunas,
+                                  onBayarTap: () => Navigator.pushNamed(
+                                      context, AppRouter.tagihan),
+                                ),
                               ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: QuickActionCard(
+                                  icon: Icons.security,
+                                  iconColor: Colors.red,
+                                  bgIconColor: Colors.red.shade50,
+                                  title: 'Panggil Satpam',
+                                  subtitle: 'RESPON CEPAT',
+                                  onTap: () => Navigator.pushNamed(
+                                      context, AppRouter.security),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
 
-                    UnitStatusCard(
-                      blockName: blok,
-                      unitNumber: nomorUnit,
-                      paymentStatus: PaymentStatus.paid,
+                        _beritaLoading
+                            ? const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 32),
+                                child: Center(
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2)),
+                              )
+                            : _beritaList.isEmpty
+                                ? const SizedBox.shrink()
+                                : NewsCarousel(
+                                    items: _beritaList
+                                        .map((b) => NewsItem(
+                                              imageUrl: b.imageUrl,
+                                              category: b.kategori,
+                                              title: b.judul,
+                                              date: b.tanggalFormatted,
+                                            ))
+                                        .toList(),
+                                    onSeeAllTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                            builder: (_) =>
+                                                const BeritaListPage()),
+                                      );
+                                    },
+                                    onNewsTap: (item) {
+                                      final index = _beritaList.indexWhere(
+                                          (b) => b.judul == item.title);
+                                      if (index != -1) {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => BeritaDetailPage(
+                                                    berita: _beritaList[index]),
+                                          ),
+                                        );
+                                      }
+                                    },
+                                  ),
+
+                        UnitStatusCard(
+                          blockName: blok,
+                          unitNumber: nomorUnit,
+                          paymentStatus: sudahLunas
+                              ? PaymentStatus.paid
+                              : PaymentStatus.unpaid,
+                        ),
+
+                        const SizedBox(height: 8),
+                        _HomeActivitySection(items: _feedItems),
+                        const SizedBox(height: 16),
+                      ],
                     ),
-
-                    const SizedBox(height: 8),
-                    _HomeActivitySection(items: _feedItems),
-                    const SizedBox(height: 16),
-                  ],
-                ),
+                  );
+                },
               ),
             ),
           ),

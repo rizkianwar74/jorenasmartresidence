@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/responsive_helper.dart';
 import 'tagihan_model.dart';
 import 'payment_webview_page.dart';
+import 'payment_repository.dart';
 
 class TagihanPage extends StatelessWidget {
   const TagihanPage({super.key});
@@ -13,6 +15,7 @@ class TagihanPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hPad = Responsive.value<double>(context, mobile: 24, tablet: 32);
+    final uid = FirebaseAuth.instance.currentUser?.uid;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7F8),
@@ -38,55 +41,194 @@ class TagihanPage extends StatelessWidget {
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: _contentMaxWidth),
-          child: SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(hPad, 16, hPad, 32),
+          child: uid == null
+              ? _buildFallback(context, hPad)
+              : StreamBuilder<List<TagihanModel>>(
+                  stream: PaymentRepository.watchUserTagihan(uid),
+                  builder: (context, snap) {
+                    if (snap.connectionState == ConnectionState.waiting) {
+                      return const Center(
+                          child: CircularProgressIndicator(
+                              color: AppColors.primary));
+                    }
+                    if (snap.hasError || !snap.hasData || snap.data!.isEmpty) {
+                      return _buildFallback(context, hPad);
+                    }
+
+                    final list = snap.data!;
+                    // Semua bulan yang belum lunas (urut dari paling lama) —
+                    // ini yang akan digabung jadi satu total tunggakan.
+                    final aktif = list.unpaidSorted;
+                    final riwayat =
+                        list.where((t) => t.status == StatusTagihan.lunas).toList();
+
+                    return SingleChildScrollView(
+                      padding: EdgeInsets.fromLTRB(hPad, 16, hPad, 32),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (aktif.isNotEmpty)
+                            _TagihanAktifCard(
+                              tagihanList: aktif,
+                              onBayar: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      PaymentWebViewPage(tagihanList: aktif),
+                                ),
+                              ),
+                            )
+                          else
+                            const _EmptyPaidCard(),
+
+                          const SizedBox(height: 28),
+
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Riwayat Pembayaran',
+                                style: GoogleFonts.inter(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textDark,
+                                ),
+                              ),
+                              Text(
+                                '${riwayat.length} transaksi',
+                                style: GoogleFonts.inter(
+                                    fontSize: 12, color: AppColors.textGrey),
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          if (riwayat.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 24),
+                              child: Center(
+                                child: Text(
+                                  'Belum ada riwayat pembayaran.',
+                                  style: GoogleFonts.inter(
+                                      fontSize: 13, color: AppColors.textGrey),
+                                ),
+                              ),
+                            )
+                          else
+                            ...riwayat.map(
+                              (t) => Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: _RiwayatCard(tagihan: t),
+                              ),
+                            ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFallback(BuildContext context, double hPad) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(hPad, 16, hPad, 32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _TagihanAktifCard(
+            tagihanList: [mockTagihanAktif],
+            onBayar: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    PaymentWebViewPage(tagihanList: [mockTagihanAktif]),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 28),
+
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Riwayat Pembayaran',
+                style: GoogleFonts.inter(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textDark,
+                ),
+              ),
+              Text(
+                '${mockRiwayatTagihan.length} transaksi',
+                style: GoogleFonts.inter(fontSize: 12, color: AppColors.textGrey),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+
+          ...mockRiwayatTagihan.map(
+            (t) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _RiwayatCard(tagihan: t),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Kartu saat semua tagihan sudah lunas ─────────────────────────────────────
+class _EmptyPaidCard extends StatelessWidget {
+  const _EmptyPaidCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.green.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.green.withOpacity(0.25)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: Colors.green.withOpacity(0.15),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.check_circle, color: Colors.green, size: 26),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _TagihanAktifCard(
-                  tagihan: mockTagihanAktif,
-                  onBayar: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          PaymentWebViewPage(tagihan: mockTagihanAktif),
-                    ),
+                Text(
+                  'Semua Tagihan Lunas',
+                  style: GoogleFonts.inter(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textDark,
                   ),
                 ),
-
-                const SizedBox(height: 28),
-
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Riwayat Pembayaran',
-                      style: GoogleFonts.inter(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textDark,
-                      ),
-                    ),
-                    Text(
-                      '${mockRiwayatTagihan.length} transaksi',
-                      style: GoogleFonts.inter(
-                          fontSize: 12, color: AppColors.textGrey),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 12),
-
-                ...mockRiwayatTagihan.map(
-                  (t) => Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: _RiwayatCard(tagihan: t),
-                  ),
+                const SizedBox(height: 2),
+                Text(
+                  'Tidak ada iuran yang perlu dibayar saat ini.',
+                  style: GoogleFonts.inter(fontSize: 12, color: AppColors.textGrey),
                 ),
               ],
             ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -94,20 +236,39 @@ class TagihanPage extends StatelessWidget {
 
 // ── Kartu tagihan aktif ───────────────────────────────────────────────────────
 class _TagihanAktifCard extends StatelessWidget {
-  const _TagihanAktifCard({required this.tagihan, this.onBayar});
-  final TagihanModel tagihan;
+  const _TagihanAktifCard({required this.tagihanList, this.onBayar});
+
+  /// Daftar tagihan yang belum lunas, urut dari bulan paling lama.
+  /// Kalau lebih dari satu bulan, berarti user punya tunggakan dan harus
+  /// bayar semuanya sekaligus dalam satu transaksi.
+  final List<TagihanModel> tagihanList;
   final VoidCallback? onBayar;
 
-  String get _statusLabel => switch (tagihan.status) {
-        StatusTagihan.belumBayar => 'Belum Dibayar',
-        StatusTagihan.jatuhTempo => 'Jatuh Tempo',
-        StatusTagihan.lunas      => 'Lunas',
-        StatusTagihan.pending    => 'Menunggu Konfirmasi',
-      };
+  TagihanModel get _acuan => tagihanList.first;
+  int get _totalJumlah => tagihanList.fold(0, (sum, t) => sum + t.jumlah);
+  bool get _adaTunggakan => tagihanList.length > 1;
+
+  String get _periodeLabel => _adaTunggakan
+      ? '${tagihanList.length} Bulan Tertunggak'
+      : _acuan.periodeLabel;
+
+  String get _statusLabel {
+    if (tagihanList.every((t) => t.status == StatusTagihan.lunas)) {
+      return 'Lunas';
+    }
+    if (tagihanList.any((t) => t.status == StatusTagihan.jatuhTempo)) {
+      return 'Jatuh Tempo';
+    }
+    if (tagihanList.any((t) => t.status == StatusTagihan.pending)) {
+      return 'Menunggu Konfirmasi';
+    }
+    return 'Belum Dibayar';
+  }
 
   @override
   Widget build(BuildContext context) {
-    final isLunas = tagihan.status == StatusTagihan.lunas;
+    final tagihan = _acuan;
+    final isLunas = tagihanList.every((t) => t.status == StatusTagihan.lunas);
 
     return Container(
       decoration: BoxDecoration(
@@ -169,7 +330,7 @@ class _TagihanAktifCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          tagihan.periodeLabel,
+                          _periodeLabel,
                           style: GoogleFonts.inter(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -226,7 +387,7 @@ class _TagihanAktifCard extends StatelessWidget {
                 const SizedBox(height: 16),
 
                 Text(
-                  tagihan.jumlahFormatted,
+                  formatRupiah(_totalJumlah),
                   style: GoogleFonts.inter(
                     fontSize: 32,
                     fontWeight: FontWeight.bold,

@@ -275,6 +275,26 @@ class SosService {
         });
   }
 
+  // ── Cek apakah ADA satpam yang sedang bertugas (isOnDuty == true) ────────
+  // Dipakai sebelum/saat kirim SOS/CALL untuk menampilkan warning ke warga
+  // bila tidak ada satpam yang online sama sekali, supaya warga tahu bahwa
+  // tidak ada yang akan langsung merespons.
+  static Future<bool> hasSatpamOnDuty() async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .where('role', isEqualTo: 'satpam')
+          .where('isOnDuty', isEqualTo: true)
+          .limit(1)
+          .get();
+      return snap.docs.isNotEmpty;
+    } catch (_) {
+      // Fail-open: kalau query gagal (mis. offline), jangan munculkan
+      // warning palsu — anggap saja statusnya tidak diketahui dan lanjutkan.
+      return true;
+    }
+  }
+
   // ── Cek apakah user punya alert aktif (belum selesai) ────────────────────
   // Dipakai agar user tidak kirim SOS dobel — filter client-side
   static Future<SosAlert?> getActiveAlertForUser(String uid) async {

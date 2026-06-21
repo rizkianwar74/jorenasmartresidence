@@ -182,7 +182,13 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
     try {
       final data = await SecurityRepository.instance.fetchUser(uid);
       final onDuty = (data?['isOnDuty'] as bool?) ?? false;
-      if (mounted) setState(() { _isOnDuty = onDuty; _loadingDuty = false; });
+      if (mounted) {
+        setState(() { _isOnDuty = onDuty; _loadingDuty = false; });
+        // Baru tahu kita sedang bertugas — proses ulang alert yang sudah
+        // masuk lebih dulu (stream Firestore tidak emit ulang dengan
+        // sendirinya hanya karena status duty lokal berubah).
+        if (onDuty) await _processSosAlerts(_activeAlerts);
+      }
     } catch (_) {
       if (mounted) setState(() => _loadingDuty = false);
     }
@@ -195,6 +201,14 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
     setState(() { _savingDuty = true; _isOnDuty = value; });
     try {
       await SecurityRepository.instance.setOnDuty(uid, value);
+      if (value) {
+        // Baru ON duty — proses ulang alert aktif yang sudah ada supaya
+        // tidak terlewat notifikasinya.
+        await _processSosAlerts(_activeAlerts);
+      } else {
+        // Baru OFF duty — langsung hentikan dering kalau sedang berbunyi.
+        _stopRinging();
+      }
     } catch (_) {
       // Revert jika gagal
       if (mounted) setState(() => _isOnDuty = !value);
@@ -208,48 +222,66 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
       (alerts) async {
         // setState dulu agar kartu SOS muncul segera
         if (mounted) setState(() => _activeAlerts = alerts);
-
-        // Deteksi alert baru yang belum diberi notif
-        for (final alert in alerts) {
-          if (!_notifiedIds.contains(alert.id)) {
-            _notifiedIds.add(alert.id);
-            HapticFeedback.heavyImpact();
-            try {
-              if (alert.type == SosType.sos) {
-                await SosNotificationService.showSosNotification(alert);
-              } else {
-                await SosNotificationService.showCallNotification(alert);
-              }
-            } catch (_) {}
-          }
-        }
-
-        // Kelola dering berdasarkan ada/tidaknya alert PENDING
-        final hasPending = alerts.any((a) => a.status == SosStatus.pending);
-        if (hasPending && _repeatTimer == null) {
-          try {
-            await _audioPlayer.setReleaseMode(ReleaseMode.loop);
-            await _audioPlayer.setVolume(1.0);
-            await _audioPlayer
-                .play(AssetSource('sounds/alarm_ringtone_sos.mp3'));
-          } catch (_) {}
-          _repeatTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-            final stillPending =
-                _activeAlerts.any((a) => a.status == SosStatus.pending);
-            if (!stillPending) {
-              _stopRinging();
-              return;
-            }
-            HapticFeedback.heavyImpact();
-          });
-        } else if (!hasPending) {
-          _stopRinging();
-        }
+        await _processSosAlerts(alerts);
       },
       onError: (e) {
         debugPrint('[SosStream] error: $e');
       },
     );
+  }
+
+  // ── Proses notifikasi & dering SOS — HANYA untuk satpam yang sedang
+  // bertugas (isOnDuty == true). Satpam yang OFF DUTY tidak akan menerima
+  // notifikasi popup maupun suara alarm sama sekali, walaupun stream
+  // Firestore-nya tetap mengalir untuk semua device yang membuka halaman ini.
+  Future<void> _processSosAlerts(List<SosAlert> alerts) async {
+    if (!_isOnDuty) {
+      // Pastikan dering berhenti kalau status berubah jadi off duty
+      // sementara masih ada alert pending.
+      _stopRinging();
+      return;
+    }
+
+    // Deteksi alert baru yang belum diberi notif
+    for (final alert in alerts) {
+      if (!_notifiedIds.contains(alert.id)) {
+        _notifiedIds.add(alert.id);
+        HapticFeedback.heavyImpact();
+        try {
+          if (alert.type == SosType.sos) {
+            await SosNotificationService.showSosNotification(alert);
+          } else {
+            await SosNotificationService.showCallNotification(alert);
+          }
+        } catch (_) {}
+      }
+    }
+
+    // Kelola dering berdasarkan ada/tidaknya alert PENDING
+    final hasPending = alerts.any((a) => a.status == SosStatus.pending);
+    if (hasPending && _repeatTimer == null) {
+      try {
+        await _audioPlayer.setReleaseMode(ReleaseMode.loop);
+        await _audioPlayer.setVolume(1.0);
+        await _audioPlayer
+            .play(AssetSource('sounds/alarm_ringtone_sos.mp3'));
+      } catch (_) {}
+      _repeatTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+        if (!_isOnDuty) {
+          _stopRinging();
+          return;
+        }
+        final stillPending =
+            _activeAlerts.any((a) => a.status == SosStatus.pending);
+        if (!stillPending) {
+          _stopRinging();
+          return;
+        }
+        HapticFeedback.heavyImpact();
+      });
+    } else if (!hasPending) {
+      _stopRinging();
+    }
   }
 
   void _stopRinging() {

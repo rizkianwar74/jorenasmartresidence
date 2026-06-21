@@ -7,6 +7,8 @@ import 'package:intl/intl.dart';
 import '../../core/services/keluhan_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/router/app_router.dart';
+import '../pembayaran/payment_repository.dart';
+import '../pembayaran/tagihan_model.dart';
 import 'widgets/admin_sidebar.dart';
 import 'widgets/admin_top_bar.dart';
 import 'data/admin_repository.dart';
@@ -53,6 +55,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
   int  _tamuHariIni   = 0;
   List<_InsidenSnap>  _recentInsiden  = [];
   List<KeluhanItem>   _recentKeluhan  = [];
+  List<TagihanModel>  _tagihanBulanIni = [];
   bool _loading = true;
 
   StreamSubscription? _wargaSub;
@@ -60,6 +63,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
   StreamSubscription? _tamuSub;
   StreamSubscription? _insidenSub;
   StreamSubscription? _keluhanSub;
+  StreamSubscription? _tagihanSub;
 
   // Jumlah insiden yang belum selesai (BARU + DITANGANI)
   int get _openInsiden =>
@@ -67,6 +71,15 @@ class _AdminHomePageState extends State<AdminHomePage> {
 
   // Insiden untuk ditampilkan di tabel (maks 5)
   List<_InsidenSnap> get _heatmapItems => _recentInsiden.take(5).toList();
+
+  // ── Financial Status (bulan ini) ────────────────────────────────────────
+  int get _totalTagihanBulanIni =>
+      _tagihanBulanIni.fold(0, (sum, t) => sum + t.jumlah);
+  int get _totalDibayarBulanIni => _tagihanBulanIni
+      .where((t) => t.status == StatusTagihan.lunas)
+      .fold(0, (sum, t) => sum + t.jumlah);
+  int get _totalMenungguBulanIni =>
+      _totalTagihanBulanIni - _totalDibayarBulanIni;
 
   static DateTime get _startOfToday {
     final n = DateTime.now();
@@ -140,6 +153,17 @@ class _AdminHomePageState extends State<AdminHomePage> {
             .toList();
       });
     });
+
+    // ── Financial status (tagihan bulan ini) ────────────────────────────────
+    final now = DateTime.now();
+    _tagihanSub = PaymentRepository.watchAllTagihan().listen((list) {
+      if (!mounted) return;
+      setState(() {
+        _tagihanBulanIni = list
+            .where((t) => t.tahun == now.year && t.bulanIndex == now.month)
+            .toList();
+      });
+    }, onError: (_) {});
   }
 
   @override
@@ -149,6 +173,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
     _tamuSub?.cancel();
     _insidenSub?.cancel();
     _keluhanSub?.cancel();
+    _tagihanSub?.cancel();
     super.dispose();
   }
 
@@ -214,9 +239,13 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                     ),
                                   ),
                                   const SizedBox(width: 20),
-                                  const Expanded(
+                                  Expanded(
                                     flex: 1,
-                                    child: _FinancialStatus(),
+                                    child: _FinancialStatus(
+                                      totalTagihan: _totalTagihanBulanIni,
+                                      totalDibayar: _totalDibayarBulanIni,
+                                      totalMenunggu: _totalMenungguBulanIni,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -646,14 +675,28 @@ class _Th extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Financial Status (static — billing tidak diintegrasikan)
+// Financial Status (live — dari koleksi Firestore 'tagihan', bulan berjalan)
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _FinancialStatus extends StatelessWidget {
-  const _FinancialStatus();
+  const _FinancialStatus({
+    required this.totalTagihan,
+    required this.totalDibayar,
+    required this.totalMenunggu,
+  });
+
+  final int totalTagihan;
+  final int totalDibayar;
+  final int totalMenunggu;
+
+  double get _persenTertagih =>
+      totalTagihan == 0 ? 0 : totalDibayar / totalTagihan;
 
   @override
   Widget build(BuildContext context) {
+    final adaTagihan = totalTagihan > 0;
+    final persenLabel = '${(_persenTertagih * 100).round()}% Tertagih';
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -673,34 +716,40 @@ class _FinancialStatus extends StatelessWidget {
 
           const SizedBox(height: 16),
 
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Rp 420M',
-                      style: GoogleFonts.inter(
-                          fontSize: 26,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textDark,
-                          height: 1)),
-                  const SizedBox(height: 4),
-                  Text('82% Tertagih',
-                      style: GoogleFonts.inter(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF16A34A))),
-                ],
-              ),
-              const Spacer(),
-              SizedBox(
-                width: 56,
-                height: 56,
-                child: CustomPaint(painter: _DonutChartPainter(progress: 0.82)),
-              ),
-            ],
-          ),
+          if (!adaTagihan)
+            Text('Belum ada tagihan bulan ini.',
+                style: GoogleFonts.inter(
+                    fontSize: 13, color: AppColors.textGrey))
+          else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(formatRupiah(totalTagihan),
+                        style: GoogleFonts.inter(
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textDark,
+                            height: 1)),
+                    const SizedBox(height: 4),
+                    Text(persenLabel,
+                        style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF16A34A))),
+                  ],
+                ),
+                const Spacer(),
+                SizedBox(
+                  width: 56,
+                  height: 56,
+                  child: CustomPaint(
+                      painter: _DonutChartPainter(progress: _persenTertagih)),
+                ),
+              ],
+            ),
 
           const SizedBox(height: 20),
 
@@ -710,7 +759,7 @@ class _FinancialStatus extends StatelessWidget {
               Text('Sudah Dibayar',
                   style: GoogleFonts.inter(
                       fontSize: 12, color: AppColors.textGrey)),
-              Text('Rp 344.4M',
+              Text(formatRupiah(totalDibayar),
                   style: GoogleFonts.inter(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -721,7 +770,7 @@ class _FinancialStatus extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
-              value: 0.82,
+              value: _persenTertagih,
               backgroundColor: Colors.grey.shade200,
               valueColor:
                   const AlwaysStoppedAnimation<Color>(AppColors.primary),
@@ -737,7 +786,7 @@ class _FinancialStatus extends StatelessWidget {
               Text('Menunggu Pembayaran',
                   style: GoogleFonts.inter(
                       fontSize: 12, color: AppColors.textGrey)),
-              Text('Rp 75.6M',
+              Text(formatRupiah(totalMenunggu),
                   style: GoogleFonts.inter(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
