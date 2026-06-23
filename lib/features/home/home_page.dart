@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/services/bantuan_service.dart';
 import '../../shared/widgets/bottom_nav_bar.dart';
@@ -13,8 +12,8 @@ import '../berita/data/berita_repository.dart';
 import 'data/home_repository.dart';
 import '../berita/berita_detail_page.dart';
 import '../berita/berita_list_page.dart';
-import '../pembayaran/payment_repository.dart';
-import '../pembayaran/tagihan_model.dart';
+import '../pembayaran/data/payment_repository.dart';
+import '../pembayaran/models/tagihan_model.dart';
 import 'widgets/home_header.dart';
 import 'widgets/quick_action_card.dart';
 import 'widgets/news_carousel.dart';
@@ -328,7 +327,7 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final user = AuthRepository.currentUser;
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = AuthRepository.currentUid;
     final namaDepan = user?.namaLengkap.split(' ').first ?? 'Pengguna';
     final namaLengkap = user?.namaLengkap ?? 'Pengguna';
     final blok = user?.blok ?? '-';

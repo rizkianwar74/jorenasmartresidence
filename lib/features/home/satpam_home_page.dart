@@ -62,6 +62,9 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
   // ── Firestore stream bantuanrequest aktif ─────────────────────────────────
   StreamSubscription<List<BantuanRequest>>? _bantuanSub;
   List<BantuanRequest> _activeBantuan = [];
+  // Snapshot mentah terakhir dari stream bantuan, dipakai untuk diproses
+  // ulang saat status bertugas berubah (stream tak emit ulang sendiri).
+  List<BantuanRequest> _latestBantuan = [];
   final Set<String> _notifiedBantuanIds = {};
 
   // ── Timer repeat notifikasi SOS PENDING ──────────────────────────────────
@@ -188,6 +191,7 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
         // masuk lebih dulu (stream Firestore tidak emit ulang dengan
         // sendirinya hanya karena status duty lokal berubah).
         if (onDuty) await _processSosAlerts(_activeAlerts);
+        await _processBantuan(_latestBantuan);
       }
     } catch (_) {
       if (mounted) setState(() => _loadingDuty = false);
@@ -208,7 +212,10 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
       } else {
         // Baru OFF duty — langsung hentikan dering kalau sedang berbunyi.
         _stopRinging();
+        await _bantuanPlayer.stop();
       }
+      // Sinkronkan kartu/suara bantuan dengan status terbaru.
+      await _processBantuan(_latestBantuan);
     } catch (_) {
       // Revert jika gagal
       if (mounted) setState(() => _isOnDuty = !value);
@@ -293,31 +300,46 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
   // ── Stream bantuan non-SOS ─────────────────────────────────────────────────
   void _startListeningBantuan() {
     _bantuanSub = BantuanService.watchActiveRequests().listen(
-      (list) async {
-        // setState dulu agar kartu muncul, BARU mainkan suara
-        if (mounted) setState(() => _activeBantuan = list);
-
-        for (final req in list) {
-          if (!_notifiedBantuanIds.contains(req.id)) {
-            _notifiedBantuanIds.add(req.id);
-            HapticFeedback.mediumImpact();
-            // Bungkus audio dalam try-catch agar tidak menghentikan alur
-            try {
-              await _bantuanPlayer.setReleaseMode(ReleaseMode.release);
-              await _bantuanPlayer.setVolume(1.0);
-              await _bantuanPlayer
-                  .play(AssetSource('sounds/notification.mp3'));
-            } catch (_) {
-              // Audio gagal tidak boleh memblokir update UI
-            }
-          }
-        }
-      },
+      (list) => _processBantuan(list),
       onError: (e) {
         // Tangkap error Firestore (misal rules belum diset)
         debugPrint('[BantuanStream] error: $e');
       },
     );
+  }
+
+  // ── Proses kartu & suara bantuan — HANYA untuk satpam yang sedang bertugas.
+  // Satpam OFF DUTY tidak melihat kartu maupun mendengar suara bantuan,
+  // walaupun stream Firestore-nya tetap mengalir.
+  Future<void> _processBantuan(List<BantuanRequest> list) async {
+    _latestBantuan = list;
+
+    if (!_isOnDuty) {
+      // Off duty — kosongkan kartu bantuan kalau sebelumnya tampil.
+      if (mounted && _activeBantuan.isNotEmpty) {
+        setState(() => _activeBantuan = []);
+      }
+      return;
+    }
+
+    // setState dulu agar kartu muncul, BARU mainkan suara
+    if (mounted) setState(() => _activeBantuan = list);
+
+    for (final req in list) {
+      if (!_notifiedBantuanIds.contains(req.id)) {
+        _notifiedBantuanIds.add(req.id);
+        HapticFeedback.mediumImpact();
+        // Bungkus audio dalam try-catch agar tidak menghentikan alur
+        try {
+          await _bantuanPlayer.setReleaseMode(ReleaseMode.release);
+          await _bantuanPlayer.setVolume(1.0);
+          await _bantuanPlayer
+              .play(AssetSource('sounds/notification.mp3'));
+        } catch (_) {
+          // Audio gagal tidak boleh memblokir update UI
+        }
+      }
+    }
   }
 
   // ── Stream patroli aktif (semua satpam) ──────────────────────────────────

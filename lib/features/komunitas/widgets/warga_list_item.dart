@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_colors.dart';
-import '../warga_model.dart';
+import '../models/warga_model.dart';
 
-class WargaListItem extends StatelessWidget {
+class WargaListItem extends StatefulWidget {
   const WargaListItem({
     super.key,
     required this.warga,
@@ -14,7 +14,19 @@ class WargaListItem extends StatelessWidget {
   final VoidCallback? onTap;
 
   @override
+  State<WargaListItem> createState() => _WargaListItemState();
+}
+
+class _WargaListItemState extends State<WargaListItem> {
+  // Kalau gambar gagal dimuat (mis. data URI korup), tetap fallback ke
+  // inisial nama alih-alih membiarkan lingkaran avatar kosong total.
+  bool _imageFailed = false;
+
+  @override
   Widget build(BuildContext context) {
+    final warga = widget.warga;
+    final onTap = widget.onTap;
+    final provider = _imageFailed ? null : warga.avatarImageProvider;
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -33,17 +45,21 @@ class WargaListItem extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Avatar
+            // Avatar — pakai avatarImageProvider (aware base64 & http URL).
+            // Kalau gagal load, tandai _imageFailed supaya rebuild jatuh ke
+            // inisial nama alih-alih lingkaran kosong.
             CircleAvatar(
               radius: 28,
               backgroundColor: AppColors.primary.withValues(alpha: 0.15),
-              backgroundImage: warga.photoUrl != null
-                  ? NetworkImage(warga.photoUrl!)
+              backgroundImage: provider,
+              onBackgroundImageError: provider != null
+                  ? (_, __) {
+                      if (mounted && !_imageFailed) {
+                        setState(() => _imageFailed = true);
+                      }
+                    }
                   : null,
-              onBackgroundImageError: warga.photoUrl != null
-                  ? (_, __) {}
-                  : null,
-              child: warga.photoUrl == null
+              child: provider == null
                   ? Text(
                       warga.namaLengkap.isNotEmpty
                           ? warga.namaLengkap[0].toUpperCase()

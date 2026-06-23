@@ -61,6 +61,13 @@ class AdminRepository {
       .where('role', isEqualTo: 'satpam')
       .snapshots();
 
+  /// Ambil set UID semua satpam (sekali ambil, bukan stream).
+  Future<Set<String>> fetchSatpamUids() async {
+    final snap =
+        await _db.collection(_users).where('role', isEqualTo: 'satpam').get();
+    return snap.docs.map((d) => d.id).toSet();
+  }
+
   // ── Patroli ────────────────────────────────────────────────────────────────
 
   Stream<QuerySnapshot<Map<String, dynamic>>> patroliAktifStream() => _db

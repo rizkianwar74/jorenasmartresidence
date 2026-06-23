@@ -1,7 +1,8 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import '../../features/auth/auth_repository.dart';
 
@@ -119,36 +120,22 @@ class KeluhanItem {
 // KeluhanService
 //
 // Collection : keluhan
-// Storage    : keluhan/{uid}/{docId}/{filename}
+// Foto       : disimpan langsung sebagai data URI base64 di field `fotoUrls`
+//              pada dokumen yang sama — SAMA seperti foto profil
+//              (AuthRepository.updatePhotoUrl) & BantuanService.sendRequest.
+//              Tidak lagi lewat Firebase Storage, supaya konsisten dan
+//              menghindari error CORS Storage di Flutter Web.
 // ─────────────────────────────────────────────────────────────────────────────
 
 class KeluhanService {
   KeluhanService._();
 
-  static final _col     = FirebaseFirestore.instance.collection('keluhan');
-  static final _storage = FirebaseStorage.instance;
-
-  // ── Upload satu foto, return download URL (throw on error) ───────────────
-  static Future<String> _uploadFoto(
-    String uid,
-    String docId,
-    int index,
-    Uint8List bytes,
-  ) async {
-    final ref = _storage
-        .ref()
-        .child('keluhan/$uid/$docId/foto_$index.jpg');
-    final task = await ref.putData(
-      bytes,
-      SettableMetadata(contentType: 'image/jpeg'),
-    );
-    return task.ref.getDownloadURL();
-  }
+  static final _col = FirebaseFirestore.instance.collection('keluhan');
 
   // ── Kirim keluhan baru ────────────────────────────────────────────────────
   /// Returns `(item, fotoErrors)`:
   /// - `item` null bila gagal total
-  /// - `fotoErrors` berisi pesan error upload per foto (kosong = semua berhasil)
+  /// - `fotoErrors` berisi pesan error encode per foto (kosong = semua berhasil)
   static Future<(KeluhanItem?, List<String>)> sendKeluhan({
     required String kategori,
     required String judul,
@@ -181,7 +168,19 @@ class KeluhanService {
         nomorUnit = (d['nomorUnit'] as String?) ?? '-';
       }
 
-      // Buat dokumen dulu (tanpa foto) untuk dapat ID-nya
+      // Konversi foto ke data URI base64 — kumpulkan error per foto (jarang
+      // terjadi karena ini cuma encoding lokal, tapi tetap dijaga defensif).
+      final urls       = <String>[];
+      final fotoErrors = <String>[];
+      for (int i = 0; i < fotos.length; i++) {
+        try {
+          urls.add('data:image/jpeg;base64,${base64Encode(fotos[i])}');
+        } catch (e) {
+          debugPrint('[KeluhanService] encode foto[$i] error: $e');
+          fotoErrors.add('Foto ${i + 1}: $e');
+        }
+      }
+
       final ref = await _col.add({
         'uid'       : uid,
         'namaWarga' : namaWarga,
@@ -191,27 +190,11 @@ class KeluhanService {
         'judul'     : judul,
         'deskripsi' : deskripsi,
         'status'    : 'MENUNGGU',
-        'fotoUrls'  : <String>[],
+        'fotoUrls'  : urls,
         'adminNote' : null,
         'createdAt' : FieldValue.serverTimestamp(),
         'updatedAt' : null,
       });
-
-      // Upload foto jika ada — kumpulkan error per foto
-      final urls        = <String>[];
-      final fotoErrors  = <String>[];
-      for (int i = 0; i < fotos.length; i++) {
-        try {
-          final url = await _uploadFoto(uid, ref.id, i, fotos[i]);
-          urls.add(url);
-        } catch (e) {
-          debugPrint('[KeluhanService] upload foto[$i] error: $e');
-          fotoErrors.add('Foto ${i + 1}: $e');
-        }
-      }
-      if (urls.isNotEmpty) {
-        await ref.update({'fotoUrls': urls});
-      }
 
       final item = KeluhanItem(
         id        : ref.id,
@@ -275,6 +258,8 @@ class KeluhanService {
     required String keluhanId,
     required StatusKeluhan status,
     String? adminNote,
+    String? assignToUid,
+    String? assignToName,
   }) async {
     try {
       final data = <String, dynamic>{
@@ -282,6 +267,11 @@ class KeluhanService {
         'updatedAt' : FieldValue.serverTimestamp(),
       };
       if (adminNote != null) data['adminNote'] = adminNote;
+      // Saat satpam menangani keluhan dari kolam bersama, dia "mengklaim"-nya.
+      if (assignToUid != null) {
+        data['assignedTo']   = assignToUid;
+        data['assignedName'] = assignToName;
+      }
       await _col.doc(keluhanId).update(data);
       return true;
     } catch (e) {
@@ -325,6 +315,57 @@ class KeluhanService {
           list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
           return list;
         });
+  }
+
+  // ── Kolam bersama: keluhan MENUNGGU yang belum di-assign ke siapa pun ─────
+  // Dipakai oleh satpam yang sedang bertugas (on-duty).
+  static Stream<List<KeluhanItem>> watchUnassignedMenunggu() {
+    return _col
+        .where('status', isEqualTo: 'MENUNGGU')
+        .snapshots()
+        .map((snap) {
+          final list = <KeluhanItem>[];
+          for (final doc in snap.docs) {
+            try {
+              final k = KeluhanItem.fromDoc(doc);
+              if (k.assignedTo == null || k.assignedTo!.isEmpty) list.add(k);
+            } catch (e) {
+              debugPrint('[KeluhanService] skip ${doc.id}: $e');
+            }
+          }
+          list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return list;
+        });
+  }
+
+  // ── Inbox satpam ──────────────────────────────────────────────────────────
+  // includeShared = true  (satpam sedang BERTUGAS): gabungan keluhan yang
+  //   ditugaskan ke dia + kolam bersama (MENUNGGU belum di-assign).
+  // includeShared = false (OFF-DUTY): hanya keluhan yang sudah ditugaskan ke dia
+  //   (agar tetap bisa menyelesaikan yang sudah diambil).
+  static Stream<List<KeluhanItem>> watchSatpamInbox(
+    String satpamUid, {
+    required bool includeShared,
+  }) {
+    if (!includeShared) return watchAssignedKeluhan(satpamUid);
+
+    final controller = StreamController<List<KeluhanItem>>();
+    var assigned = <KeluhanItem>[];
+    var shared   = <KeluhanItem>[];
+    void emit() {
+      final byId = <String, KeluhanItem>{};
+      for (final k in [...assigned, ...shared]) {
+        byId[k.id] = k;
+      }
+      final merged = byId.values.toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      if (!controller.isClosed) controller.add(merged);
+    }
+
+    final s1 = watchAssignedKeluhan(satpamUid).listen((l) { assigned = l; emit(); });
+    final s2 = watchUnassignedMenunggu().listen((l) { shared = l; emit(); });
+    controller.onCancel = () { s1.cancel(); s2.cancel(); };
+    return controller.stream;
   }
 
   // ── Ambil daftar satpam aktif dari collection users ───────────────────────

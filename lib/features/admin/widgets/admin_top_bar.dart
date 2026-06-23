@@ -86,40 +86,6 @@ class AdminTopBar extends StatelessWidget {
             const SizedBox(width: 16),
           ],
 
-          // ── Bell notification ─────────────────────────────────────────
-          Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppColors.background,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.notifications_outlined,
-                  size: 20,
-                  color: AppColors.textGrey,
-                ),
-              ),
-              Positioned(
-                top: 6,
-                right: 8,
-                child: Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: Colors.red,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(width: 16),
-
           // ── Admin profile + dropdown ──────────────────────────────────
           PopupMenuButton<String>(
             offset: const Offset(0, 48),

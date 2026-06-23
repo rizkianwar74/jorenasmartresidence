@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -1016,22 +1017,11 @@ class _FotoColumnState extends State<_FotoColumn> {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(10),
               child: Stack(children: [
-                Image.network(
-                  fotos[_selected],
+                _AdminFotoImage(
+                  url: fotos[_selected],
                   width: double.infinity,
                   height: 160,
                   fit: BoxFit.cover,
-                  loadingBuilder: (_, child, prog) => prog == null ? child : Container(
-                    width: double.infinity, height: 160,
-                    color: Colors.grey.shade100,
-                    child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                  ),
-                  errorBuilder: (_, __, ___) => Container(
-                    width: double.infinity, height: 160,
-                    color: Colors.grey.shade100,
-                    child: Icon(Icons.broken_image_outlined,
-                        size: 32, color: Colors.grey.shade400),
-                  ),
                 ),
                 Positioned(bottom: 8, right: 8,
                   child: Container(
@@ -1068,11 +1058,7 @@ class _FotoColumnState extends State<_FotoColumn> {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(6),
                     child: Stack(children: [
-                      Image.network(fotos[i], width: 52, height: 52, fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(width: 52, height: 52,
-                              color: Colors.grey.shade200,
-                              child: Icon(Icons.broken_image_outlined, size: 20,
-                                  color: Colors.grey.shade400))),
+                      _AdminFotoImage(url: fotos[i], width: 52, height: 52, fit: BoxFit.cover),
                       if (_selected == i)
                         Container(width: 52, height: 52,
                             decoration: BoxDecoration(
@@ -1134,13 +1120,10 @@ class _FullscreenViewerState extends State<_FullscreenViewer> {
           const SizedBox(height: 12),
           ClipRRect(
             borderRadius: BorderRadius.circular(12),
-            child: Image.network(
-              widget.urls[_current],
+            child: _AdminFotoImage(
+              url: widget.urls[_current],
               fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => Container(
-                height: 200, color: Colors.grey.shade800,
-                child: const Icon(Icons.broken_image_outlined, color: Colors.white54, size: 48),
-              ),
+              dark: true,
             ),
           ),
           if (widget.urls.length > 1) ...[
@@ -1179,6 +1162,81 @@ class _NavBtn extends StatelessWidget {
       ),
     );
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Gambar foto (SOS/Bantuan/Patroli) — aware base64 (data URI) maupun URL
+// http biasa. Sejak BantuanService & SecurityRepository.uploadFotoPatroli
+// disamakan dengan pola foto profil, fotoUrls sekarang berisi data URI
+// base64 — Image.network saja tidak bisa decode itu.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _AdminFotoImage extends StatelessWidget {
+  const _AdminFotoImage({
+    required this.url,
+    this.width,
+    this.height,
+    this.fit = BoxFit.cover,
+    this.dark = false,
+  });
+  final String url;
+  final double? width;
+  final double? height;
+  final BoxFit fit;
+  final bool dark;
+
+  bool get _isBase64 => url.startsWith('data:image');
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isBase64) {
+      try {
+        final bytes = base64Decode(url.split(',').last);
+        return Image.memory(
+          bytes,
+          width: width,
+          height: height,
+          fit: fit,
+          errorBuilder: (_, __, ___) => _placeholder(),
+        );
+      } catch (_) {
+        return _placeholder();
+      }
+    }
+    return Image.network(
+      url,
+      width: width,
+      height: height,
+      fit: fit,
+      loadingBuilder: (_, child, prog) => prog == null ? child : _loading(),
+      errorBuilder: (_, __, ___) => _placeholder(),
+    );
+  }
+
+  Widget _loading() => Container(
+        width: width,
+        height: height,
+        color: dark ? Colors.grey.shade800 : Colors.grey.shade100,
+        child: Center(
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: dark ? Colors.white : null,
+            ),
+          ),
+        ),
+      );
+
+  Widget _placeholder() => Container(
+        width: width,
+        height: height,
+        color: dark ? Colors.grey.shade800 : Colors.grey.shade100,
+        child: Icon(Icons.broken_image_outlined,
+            size: dark ? 48 : 28,
+            color: dark ? Colors.white54 : Colors.grey.shade400),
+      );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

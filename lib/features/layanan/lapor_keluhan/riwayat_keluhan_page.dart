@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -488,19 +489,7 @@ class _DetailSheet extends StatelessWidget {
                   separatorBuilder: (_, __) => const SizedBox(width: 8),
                   itemBuilder: (_, i) => ClipRRect(
                     borderRadius: BorderRadius.circular(10),
-                    child: Image.network(
-                      item.fotoUrls[i],
-                      width: 90,
-                      height: 90,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
-                        width: 90,
-                        height: 90,
-                        color: Colors.grey.shade200,
-                        child: const Icon(Icons.broken_image_outlined,
-                            color: Colors.grey),
-                      ),
-                    ),
+                    child: _RiwayatFotoImage(url: item.fotoUrls[i]),
                   ),
                 ),
               ),
@@ -724,4 +713,45 @@ class _BuatLaporanBanner extends StatelessWidget {
       ),
     );
   }
+}
+
+// ── Gambar foto bukti keluhan — aware base64 (data URI) maupun URL http.
+// KeluhanService.sendKeluhan kini menyimpan base64, sama seperti foto
+// profil/bantuan/patroli — Image.network saja tidak bisa decode itu.
+class _RiwayatFotoImage extends StatelessWidget {
+  const _RiwayatFotoImage({required this.url});
+  final String url;
+
+  bool get _isBase64 => url.startsWith('data:image');
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isBase64) {
+      try {
+        return Image.memory(
+          base64Decode(url.split(',').last),
+          width: 90,
+          height: 90,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _placeholder(),
+        );
+      } catch (_) {
+        return _placeholder();
+      }
+    }
+    return Image.network(
+      url,
+      width: 90,
+      height: 90,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => _placeholder(),
+    );
+  }
+
+  Widget _placeholder() => Container(
+        width: 90,
+        height: 90,
+        color: Colors.grey.shade200,
+        child: const Icon(Icons.broken_image_outlined, color: Colors.grey),
+      );
 }

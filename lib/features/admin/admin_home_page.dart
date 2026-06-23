@@ -7,8 +7,8 @@ import 'package:intl/intl.dart';
 import '../../core/services/keluhan_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/router/app_router.dart';
-import '../pembayaran/payment_repository.dart';
-import '../pembayaran/tagihan_model.dart';
+import '../pembayaran/data/payment_repository.dart';
+import '../pembayaran/models/tagihan_model.dart';
 import 'widgets/admin_sidebar.dart';
 import 'widgets/admin_top_bar.dart';
 import 'data/admin_repository.dart';
@@ -209,13 +209,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // ── System status bar ───────────────────
-                              _SystemStatusBar(
-                                onLogInsiden: () => Navigator.pushReplacementNamed(
-                                    context, AppRouter.adminInsiden),
-                              ),
-                              const SizedBox(height: 20),
-
                               // ── Stat cards ─────────────────────────
                               _StatCardsRow(
                                 totalWarga   : _totalWarga,
@@ -265,115 +258,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
                 ),
               ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// System Status Bar
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _SystemStatusBar extends StatelessWidget {
-  const _SystemStatusBar({required this.onLogInsiden});
-  final VoidCallback onLogInsiden;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 10,
-            height: 10,
-            decoration: const BoxDecoration(
-                color: Color(0xFF22C55E), shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Sistem Operasional: Aktif',
-                  style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textDark)),
-              Text('Semua modul berfungsi normal.',
-                  style: GoogleFonts.inter(
-                      fontSize: 12, color: AppColors.textGrey)),
-            ],
-          ),
-          const Spacer(),
-          ElevatedButton(
-            onPressed: () => _showAlarmDialog(context),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFDC2626),
-              foregroundColor: Colors.white,
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            child: Text('TRIGGER ALARM',
-                style: GoogleFonts.inter(
-                    fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-          ),
-          const SizedBox(width: 12),
-          OutlinedButton(
-            onPressed: onLogInsiden,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.textDark,
-              side: BorderSide(color: Colors.grey.shade300),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            child: Text('Log Insiden Manual',
-                style: GoogleFonts.inter(
-                    fontSize: 13, fontWeight: FontWeight.w500)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showAlarmDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(children: [
-          const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 24),
-          const SizedBox(width: 8),
-          Text('Aktifkan Alarm Darurat?',
-              style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16)),
-        ]),
-        content: Text(
-          'Tindakan ini akan mengirim notifikasi darurat ke seluruh penghuni dan satpam.',
-          style: GoogleFonts.inter(fontSize: 14, height: 1.5),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Batal',
-                style: GoogleFonts.inter(color: AppColors.textGrey)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            child: Text('Aktifkan',
-                style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
           ),
         ],
       ),

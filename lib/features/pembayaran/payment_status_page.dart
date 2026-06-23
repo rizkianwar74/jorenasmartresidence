@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/router/app_router.dart';
-import 'tagihan_model.dart';
+import 'models/tagihan_model.dart';
 
 enum PaymentResult { success, failed, pending }
 

@@ -66,6 +66,7 @@ class _BantuanFormPageState extends State<BantuanFormPage> {
     final result = await BantuanService.sendRequest(
       kategori: widget.category.title,
       catatan: _catatanController.text.trim(),
+      fotos: _selectedImages,
     );
 
     if (!mounted) return;

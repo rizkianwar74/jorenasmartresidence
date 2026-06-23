@@ -6,9 +6,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_colors.dart';
-import '../pembayaran/payment_repository.dart';
-import '../pembayaran/tagihan_model.dart';
-import '../pembayaran/seed_tagihan.dart';
+import 'data/admin_repository.dart';
+import '../pembayaran/data/payment_repository.dart';
+import '../pembayaran/models/tagihan_model.dart';
+import '../../tool/seed_tagihan.dart';
 import 'widgets/admin_sidebar.dart';
 import 'widgets/admin_top_bar.dart';
 
@@ -21,6 +22,25 @@ class AdminBillingPage extends StatefulWidget {
 
 class _AdminBillingPageState extends State<AdminBillingPage> {
   String _filter = 'Semua'; // Semua | Lunas | Belum Bayar | Jatuh Tempo
+  int? _filterBulan; // 1-12, null = semua bulan
+  int? _filterTahun; // null = semua tahun
+
+  // UID satpam — diambil sekali saat halaman dibuka; dipakai untuk
+  // menyaring tagihan agar hanya warga (role: user) yang tampil di billing.
+  Set<String> _satpamUids = {};
+
+  @override
+  void initState() {
+    super.initState();
+    SeedTagihan.autoSeedIfNeeded();
+    _loadSatpamUids();
+  }
+
+  Future<void> _loadSatpamUids() async {
+    final uids = await AdminRepository.instance.fetchSatpamUids();
+    if (!mounted) return;
+    setState(() => _satpamUids = uids);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -135,12 +155,22 @@ class _AdminBillingPageState extends State<AdminBillingPage> {
                             icon: Icons.error_outline,
                             text: 'Gagal memuat: ${snap.error}');
                       }
-                      final all = snap.data ?? const [];
+                      // Tampilkan hanya tagihan warga (role: user).
+                      // Tagihan satpam yang mungkin sudah ada di Firestore
+                      // disaring di sini agar tidak muncul di billing admin.
+                      final all = (snap.data ?? const <TagihanModel>[])
+                          .where((t) => !_satpamUids.contains(t.userId))
+                          .toList();
                       return _BillingContent(
                         all: all,
                         filter: _filter,
+                        filterBulan: _filterBulan,
+                        filterTahun: _filterTahun,
                         onFilter: (f) => setState(() => _filter = f),
+                        onFilterBulan: (b) => setState(() => _filterBulan = b),
+                        onFilterTahun: (t) => setState(() => _filterTahun = t),
                         onHubungi: _showHubungiMenu,
+                        onEditStatus: _showEditStatusDialog,
                       );
                     },
                   ),
@@ -232,6 +262,102 @@ class _AdminBillingPageState extends State<AdminBillingPage> {
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(msg)));
   }
+
+  /// Bottom sheet untuk ubah status tagihan secara manual.
+  void _showEditStatusDialog(TagihanModel t) {
+    final isLunas = t.status == StatusTagihan.lunas;
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Ubah Status Pembayaran',
+                style: GoogleFonts.inter(
+                    fontSize: 16, fontWeight: FontWeight.bold,
+                    color: AppColors.textDark),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${t.namaResiden} · ${t.periodeLabel}',
+                style: GoogleFonts.inter(
+                    fontSize: 13, color: AppColors.textGrey),
+              ),
+              const SizedBox(height: 6),
+              // Status saat ini
+              Row(
+                children: [
+                  Text('Status saat ini: ',
+                      style: GoogleFonts.inter(
+                          fontSize: 12, color: AppColors.textGrey)),
+                  _StatusBadge(status: t.status),
+                ],
+              ),
+              const SizedBox(height: 20),
+              // Pilihan aksi
+              if (!isLunas)
+                _EditStatusTile(
+                  icon: Icons.check_circle_outline,
+                  iconColor: Colors.green.shade600,
+                  bgColor: Colors.green.shade50,
+                  title: 'Tandai Lunas',
+                  subtitle: 'Catat sebagai pembayaran tunai hari ini',
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await _applyStatusManual(t, StatusTagihan.lunas);
+                  },
+                ),
+              if (isLunas)
+                _EditStatusTile(
+                  icon: Icons.undo_rounded,
+                  iconColor: Colors.red.shade600,
+                  bgColor: Colors.red.shade50,
+                  title: 'Tandai Belum Bayar',
+                  subtitle: 'Batalkan status lunas (hapus catatan bayar)',
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await _applyStatusManual(t, StatusTagihan.belumBayar);
+                  },
+                ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('Batal',
+                      style: GoogleFonts.inter(
+                          color: AppColors.textGrey,
+                          fontWeight: FontWeight.w600)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _applyStatusManual(
+      TagihanModel t, StatusTagihan newStatus) async {
+    try {
+      await PaymentRepository.setStatusManual(
+          tagihanId: t.id, status: newStatus);
+      if (!mounted) return;
+      final label =
+          newStatus == StatusTagihan.lunas ? 'Lunas' : 'Belum Bayar';
+      _toast('${t.namaResiden} ditandai $label.');
+    } catch (e) {
+      if (!mounted) return;
+      _toast('Gagal mengubah status: $e');
+    }
+  }
 }
 
 // ── Konten utama ─────────────────────────────────────────────────────────────
@@ -239,14 +365,24 @@ class _BillingContent extends StatefulWidget {
   const _BillingContent({
     required this.all,
     required this.filter,
+    required this.filterBulan,
+    required this.filterTahun,
     required this.onFilter,
+    required this.onFilterBulan,
+    required this.onFilterTahun,
     required this.onHubungi,
+    required this.onEditStatus,
   });
 
   final List<TagihanModel> all;
   final String filter;
+  final int? filterBulan; // 1-12, null = semua bulan
+  final int? filterTahun; // null = semua tahun
   final ValueChanged<String> onFilter;
+  final ValueChanged<int?> onFilterBulan;
+  final ValueChanged<int?> onFilterTahun;
   final ValueChanged<TagihanModel> onHubungi;
+  final ValueChanged<TagihanModel> onEditStatus;
 
   @override
   State<_BillingContent> createState() => _BillingContentState();
@@ -260,27 +396,43 @@ class _BillingContentState extends State<_BillingContent> {
   @override
   void didUpdateWidget(covariant _BillingContent oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.filter != widget.filter) {
+    if (oldWidget.filter != widget.filter ||
+        oldWidget.filterBulan != widget.filterBulan ||
+        oldWidget.filterTahun != widget.filterTahun) {
       _currentPage = 1;
     }
   }
 
+  // Tagihan setelah difilter periode (bulan & tahun) saja — dasar untuk
+  // stat cards (Total/Lunas/Belum Bayar) DAN untuk filter status di tabel.
+  List<TagihanModel> get _periodeFiltered {
+    Iterable<TagihanModel> result = widget.all;
+    if (widget.filterBulan != null) {
+      result = result.where((t) => t.bulanIndex == widget.filterBulan);
+    }
+    if (widget.filterTahun != null) {
+      result = result.where((t) => t.tahun == widget.filterTahun);
+    }
+    return result.toList();
+  }
+
+  // Tagihan setelah filter periode + filter status — dipakai untuk tabel.
   List<TagihanModel> get _filtered {
     switch (widget.filter) {
       case 'Lunas':
-        return widget.all
+        return _periodeFiltered
             .where((t) => t.status == StatusTagihan.lunas)
             .toList();
       case 'Belum Bayar':
-        return widget.all
+        return _periodeFiltered
             .where((t) => t.status == StatusTagihan.belumBayar)
             .toList();
       case 'Jatuh Tempo':
-        return widget.all
+        return _periodeFiltered
             .where((t) => t.status == StatusTagihan.jatuhTempo)
             .toList();
       default:
-        return widget.all;
+        return _periodeFiltered;
     }
   }
 
@@ -294,9 +446,17 @@ class _BillingContentState extends State<_BillingContent> {
     return _filtered.sublist(start, end);
   }
 
+  // Tahun-tahun yang benar-benar ada di data — opsi dropdown Tahun.
+  List<int> get _availableYears {
+    final years = widget.all.map((t) => t.tahun).toSet().toList();
+    years.sort();
+    if (years.isEmpty) years.add(DateTime.now().year);
+    return years;
+  }
+
   int get _lunas =>
-      widget.all.where((t) => t.status == StatusTagihan.lunas).length;
-  int get _belum => widget.all
+      _periodeFiltered.where((t) => t.status == StatusTagihan.lunas).length;
+  int get _belum => _periodeFiltered
       .where((t) =>
           t.status == StatusTagihan.belumBayar ||
           t.status == StatusTagihan.jatuhTempo)
@@ -305,6 +465,16 @@ class _BillingContentState extends State<_BillingContent> {
   void _onFilter(String f) {
     setState(() => _currentPage = 1);
     widget.onFilter(f);
+  }
+
+  void _onFilterBulan(int? b) {
+    setState(() => _currentPage = 1);
+    widget.onFilterBulan(b);
+  }
+
+  void _onFilterTahun(int? t) {
+    setState(() => _currentPage = 1);
+    widget.onFilterTahun(t);
   }
 
   void _onPageChanged(int p) => setState(() => _currentPage = p);
@@ -344,7 +514,8 @@ class _BillingContentState extends State<_BillingContent> {
                   ],
                 ),
               ),
-              _MiniStat(label: 'TOTAL TAGIHAN', value: '${widget.all.length}'),
+              _MiniStat(
+                  label: 'TOTAL TAGIHAN', value: '${_periodeFiltered.length}'),
               const SizedBox(width: 12),
               _MiniStat(
                   label: 'LUNAS', value: '$_lunas', color: Colors.green),
@@ -364,7 +535,15 @@ class _BillingContentState extends State<_BillingContent> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _FilterBar(selected: widget.filter, onSelect: _onFilter),
+                _FilterBar(
+                  selected: widget.filter,
+                  onSelect: _onFilter,
+                  filterBulan: widget.filterBulan,
+                  filterTahun: widget.filterTahun,
+                  availableYears: _availableYears,
+                  onFilterBulan: _onFilterBulan,
+                  onFilterTahun: _onFilterTahun,
+                ),
                 if (_filtered.isEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(
@@ -388,7 +567,10 @@ class _BillingContentState extends State<_BillingContent> {
                     ),
                   )
                 else ...[
-                  _TagihanTable(items: _paginated, onHubungi: widget.onHubungi),
+                  _TagihanTable(
+                      items: _paginated,
+                      onHubungi: widget.onHubungi,
+                      onEditStatus: widget.onEditStatus),
                   _PaginationBar(
                     currentPage: _currentPage.clamp(1, _totalPages),
                     totalPages: _totalPages,
@@ -406,13 +588,29 @@ class _BillingContentState extends State<_BillingContent> {
   }
 }
 
-// ── Filter chips ─────────────────────────────────────────────────────────────
+// ── Filter chips (status) + filter periode (Bulan & Tahun) — satu baris ─────
 class _FilterBar extends StatelessWidget {
-  const _FilterBar({required this.selected, required this.onSelect});
+  const _FilterBar({
+    required this.selected,
+    required this.onSelect,
+    required this.filterBulan,
+    required this.filterTahun,
+    required this.availableYears,
+    required this.onFilterBulan,
+    required this.onFilterTahun,
+  });
+
   final String selected;
   final ValueChanged<String> onSelect;
+  final int? filterBulan;
+  final int? filterTahun;
+  final List<int> availableYears;
+  final ValueChanged<int?> onFilterBulan;
+  final ValueChanged<int?> onFilterTahun;
 
   static const _options = ['Semua', 'Lunas', 'Belum Bayar', 'Jatuh Tempo'];
+
+  bool get _periodeActive => filterBulan != null || filterTahun != null;
 
   @override
   Widget build(BuildContext context) {
@@ -427,34 +625,139 @@ class _FilterBar extends StatelessWidget {
         border:
             Border(bottom: BorderSide(color: Colors.grey.shade200)),
       ),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: _options.map((o) {
-          final active = o == selected;
-          return InkWell(
-            onTap: () => onSelect(o),
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-              decoration: BoxDecoration(
-                color: active ? AppColors.primary : Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                    color:
-                        active ? AppColors.primary : Colors.grey.shade300),
-              ),
-              child: Text(
-                o,
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: active ? Colors.white : AppColors.textGrey,
-                ),
-              ),
+      child: Row(
+        children: [
+          // Status chips — Semua / Lunas / Belum Bayar / Jatuh Tempo
+          Expanded(
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _options.map((o) {
+                final active = o == selected;
+                return InkWell(
+                  onTap: () => onSelect(o),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: active ? AppColors.primary : Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                          color: active
+                              ? AppColors.primary
+                              : Colors.grey.shade300),
+                    ),
+                    child: Text(
+                      o,
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: active ? Colors.white : AppColors.textGrey,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
             ),
-          );
-        }).toList(),
+          ),
+          const SizedBox(width: 12),
+          // Filter periode — Bulan & Tahun, sejajar di sebelah kanan
+          Wrap(
+            spacing: 10,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _PeriodeDropdown(
+                value: filterBulan,
+                hint: 'Semua Bulan',
+                options: List<int>.generate(12, (i) => i + 1),
+                labelBuilder: (m) => bulanPanjangList[m - 1],
+                onChanged: onFilterBulan,
+              ),
+              _PeriodeDropdown(
+                value: filterTahun,
+                hint: 'Semua Tahun',
+                options: availableYears,
+                labelBuilder: (y) => '$y',
+                onChanged: onFilterTahun,
+              ),
+              if (_periodeActive)
+                TextButton.icon(
+                  onPressed: () {
+                    onFilterBulan(null);
+                    onFilterTahun(null);
+                  },
+                  icon: const Icon(Icons.close, size: 14),
+                  label: Text('Reset',
+                      style: GoogleFonts.inter(
+                          fontSize: 12, fontWeight: FontWeight.w600)),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: const Size(0, 30),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PeriodeDropdown extends StatelessWidget {
+  const _PeriodeDropdown({
+    required this.value,
+    required this.hint,
+    required this.options,
+    required this.labelBuilder,
+    required this.onChanged,
+  });
+
+  final int? value;
+  final String hint;
+  final List<int> options;
+  final String Function(int) labelBuilder;
+  final ValueChanged<int?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 34,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<int?>(
+          value: value,
+          hint: Text(hint,
+              style:
+                  GoogleFonts.inter(fontSize: 12, color: AppColors.textGrey)),
+          icon: Icon(Icons.keyboard_arrow_down,
+              size: 16, color: AppColors.textGrey),
+          isDense: true,
+          style: GoogleFonts.inter(
+              fontSize: 12,
+              color: AppColors.textDark,
+              fontWeight: FontWeight.w600),
+          items: [
+            DropdownMenuItem<int?>(
+              value: null,
+              child: Text(hint,
+                  style: GoogleFonts.inter(
+                      fontSize: 12, color: AppColors.textGrey)),
+            ),
+            ...options.map((o) => DropdownMenuItem<int?>(
+                  value: o,
+                  child: Text(labelBuilder(o),
+                      style: GoogleFonts.inter(fontSize: 12)),
+                )),
+          ],
+          onChanged: onChanged,
+        ),
       ),
     );
   }
@@ -462,9 +765,14 @@ class _FilterBar extends StatelessWidget {
 
 // ── Tabel tagihan ────────────────────────────────────────────────────────────
 class _TagihanTable extends StatelessWidget {
-  const _TagihanTable({required this.items, required this.onHubungi});
+  const _TagihanTable({
+    required this.items,
+    required this.onHubungi,
+    required this.onEditStatus,
+  });
   final List<TagihanModel> items;
   final ValueChanged<TagihanModel> onHubungi;
+  final ValueChanged<TagihanModel> onEditStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -481,19 +789,26 @@ class _TagihanTable extends StatelessWidget {
               Expanded(flex: 2, child: _HeaderText('JUMLAH')),
               Expanded(flex: 2, child: _HeaderText('STATUS')),
               Expanded(flex: 2, child: _HeaderText('AKSI')),
+              SizedBox(width: 56, child: _HeaderText('EDIT')),
             ],
           ),
         ),
-        ...items.map((t) => _TagihanRow(item: t, onHubungi: onHubungi)),
+        ...items.map((t) => _TagihanRow(
+            item: t, onHubungi: onHubungi, onEditStatus: onEditStatus)),
       ],
     );
   }
 }
 
 class _TagihanRow extends StatelessWidget {
-  const _TagihanRow({required this.item, required this.onHubungi});
+  const _TagihanRow({
+    required this.item,
+    required this.onHubungi,
+    required this.onEditStatus,
+  });
   final TagihanModel item;
   final ValueChanged<TagihanModel> onHubungi;
+  final ValueChanged<TagihanModel> onEditStatus;
 
   bool get _unpaid =>
       item.status == StatusTagihan.belumBayar ||
@@ -564,30 +879,48 @@ class _TagihanRow extends StatelessWidget {
           ),
           // Status
           Expanded(flex: 2, child: _StatusBadge(status: item.status)),
-          // Aksi
+          // Kolom AKSI — tombol Hubungi (hanya untuk yang belum bayar)
           Expanded(
             flex: 2,
             child: _unpaid
-                ? Align(
-                    alignment: Alignment.centerLeft,
-                    child: OutlinedButton.icon(
-                      onPressed: () => onHubungi(item),
-                      icon: const Icon(Icons.phone_in_talk, size: 14),
-                      label: Text('Hubungi',
-                          style: GoogleFonts.inter(
-                              fontSize: 11, fontWeight: FontWeight.w600)),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.primary,
-                        side: BorderSide(color: AppColors.primaryLight),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
-                        minimumSize: const Size(0, 30),
-                      ),
+                ? OutlinedButton.icon(
+                    onPressed: () => onHubungi(item),
+                    icon: const Icon(Icons.phone_in_talk, size: 14),
+                    label: Text('Hubungi',
+                        style: GoogleFonts.inter(
+                            fontSize: 11, fontWeight: FontWeight.w600)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      side: BorderSide(color: AppColors.primaryLight),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      minimumSize: const Size(0, 30),
                     ),
                   )
-                : Text('-',
-                    style: GoogleFonts.inter(
-                        fontSize: 12, color: AppColors.textGrey)),
+                : const SizedBox.shrink(),
+          ),
+          // Kolom EDIT — ikon pensil, selalu tampil, lebar tetap sejajar header
+          SizedBox(
+            width: 56,
+            child: Center(
+              child: Tooltip(
+                message: 'Ubah status pembayaran',
+                child: InkWell(
+                  onTap: () => onEditStatus(item),
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Icon(Icons.edit_outlined,
+                        size: 15, color: AppColors.textGrey),
+                  ),
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -705,6 +1038,71 @@ class _CenterMessage extends StatelessWidget {
               style: GoogleFonts.inter(
                   fontSize: 13, color: AppColors.textGrey)),
         ],
+      ),
+    );
+  }
+}
+
+// ── Tile opsi edit status (dipakai di bottom sheet) ──────────────────────────
+class _EditStatusTile extends StatelessWidget {
+  const _EditStatusTile({
+    required this.icon,
+    required this.iconColor,
+    required this.bgColor,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final Color iconColor;
+  final Color bgColor;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: iconColor.withValues(alpha: 0.25)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: iconColor, size: 20),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: GoogleFonts.inter(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: iconColor)),
+                  const SizedBox(height: 2),
+                  Text(subtitle,
+                      style: GoogleFonts.inter(
+                          fontSize: 12, color: AppColors.textGrey)),
+                ],
+              ),
+            ),
+            Icon(Icons.arrow_forward_ios, size: 14, color: iconColor),
+          ],
+        ),
       ),
     );
   }

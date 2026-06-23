@@ -1,23 +1,21 @@
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import '../../auth/auth_repository.dart';
 
-/// Sumber tunggal akses data Firestore/Storage untuk halaman-halaman satpam
+/// Sumber tunggal akses data Firestore untuk halaman-halaman satpam
 /// (feature `security`).
 ///
 /// Tujuannya sama seperti [AdminRepository]: memindahkan seluruh pemanggilan
-/// `FirebaseFirestore.instance`, `FirebaseStorage.instance`, dan
-/// `FirebaseAuth.instance` dari lapisan UI ke satu tempat agar mudah dipakai
-/// ulang, diubah, dan diuji.
+/// `FirebaseFirestore.instance` dan `FirebaseAuth.instance` dari lapisan UI
+/// ke satu tempat agar mudah dipakai ulang, diubah, dan diuji.
 class SecurityRepository {
   SecurityRepository._();
 
   static final SecurityRepository instance = SecurityRepository._();
 
   final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final FirebaseStorage _storage = FirebaseStorage.instance;
 
   // ── Nama koleksi (terpusat) ────────────────────────────────────────────────
   static const String _users       = 'users';
@@ -163,23 +161,23 @@ class SecurityRepository {
   Future<void> selesaiPatroli(String docId, Map<String, dynamic> data) =>
       _db.collection(_patroli).doc(docId).update(data);
 
-  /// Unggah daftar foto patroli ke Storage, kembalikan URL unduhan yang sukses.
+  /// Konversi daftar foto patroli ke data URI base64, langsung disimpan di
+  /// field `fotoUrls` dokumen patroli — SAMA seperti foto profil/keluhan/
+  /// bantuan, tidak lagi lewat Firebase Storage (hindari CORS di Flutter Web
+  /// & lebih simpel karena tidak perlu uid/docId untuk path Storage lagi).
+  /// [uid]/[docId] dipertahankan di signature untuk kompatibilitas pemanggil,
+  /// walau sudah tidak dipakai di dalam.
   Future<List<String>> uploadFotoPatroli(
     String uid,
     String docId,
     List<Uint8List> fotos,
   ) async {
     final urls = <String>[];
-    for (int i = 0; i < fotos.length; i++) {
+    for (final bytes in fotos) {
       try {
-        final ref = _storage.ref().child('patroli/$uid/$docId/foto_$i.jpg');
-        final task = await ref.putData(
-          fotos[i],
-          SettableMetadata(contentType: 'image/jpeg'),
-        );
-        urls.add(await task.ref.getDownloadURL());
+        urls.add('data:image/jpeg;base64,${base64Encode(bytes)}');
       } catch (_) {
-        // Lewati foto yang gagal diunggah.
+        // Lewati foto yang gagal di-encode.
       }
     }
     return urls;

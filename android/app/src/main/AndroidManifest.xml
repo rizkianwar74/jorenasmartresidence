@@ -13,7 +13,7 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
     <application
-        android:label="aplikasismartresidence"
+        android:label="JorenaResidence"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -60,5 +60,24 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+
+        <!-- Required so url_launcher's canLaunchUrl()/launchUrl() can detect
+             a browser/WhatsApp/dialer on Android 11+ RELEASE builds. Without
+             this, canLaunchUrl always returns false in a release APK (even
+             though WhatsApp/browser is actually installed) because of
+             package visibility restrictions — this was causing "Tidak dapat
+             membuka WhatsApp" on the Komunitas page and would also affect
+             tel: links (Hubungi button di Billing admin).
+             https://developer.android.com/training/package-visibility -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="tel"/>
+        </intent>
+        <package android:name="com.whatsapp"/>
+        <package android:name="com.whatsapp.w4b"/>
     </queries>
 </manifest>

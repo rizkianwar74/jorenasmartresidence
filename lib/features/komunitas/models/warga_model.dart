@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'package:flutter/material.dart';
+
 class WargaModel {
   const WargaModel({
     required this.id,
@@ -20,6 +23,27 @@ class WargaModel {
   final String? komunitasRole; // e.g. 'KETUA RT', 'BENDAHARA'
 
   String get unitLabel => '$blok - No. $nomorUnit';
+
+  /// Provider gambar avatar yang aman dipakai langsung di CircleAvatar/
+  /// DecorationImage — otomatis deteksi apakah [photoUrl] berupa data URI
+  /// base64 (`data:image/...;base64,...`, dipakai oleh halaman edit profil
+  /// karena project ini tidak memakai Firebase Storage) atau URL http(s)
+  /// biasa. NetworkImage TIDAK bisa decode data URI base64, makanya foto
+  /// profil warga sebelumnya tidak pernah muncul di halaman Komunitas
+  /// (selalu fallback ke inisial nama).
+  ImageProvider? get avatarImageProvider {
+    final url = photoUrl;
+    if (url == null || url.isEmpty) return null;
+    if (url.startsWith('data:image')) {
+      try {
+        final base64Str = url.split(',').last;
+        return MemoryImage(base64Decode(base64Str));
+      } catch (_) {
+        return null;
+      }
+    }
+    return NetworkImage(url);
+  }
 
   /// Format nomor WA: 08xx → 628xx
   String get waNumber {

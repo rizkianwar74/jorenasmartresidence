@@ -170,89 +170,107 @@ class _AdminBeritaPageState extends State<AdminBeritaPage> {
                             const SizedBox(height: 24),
 
                             // ── Table ────────────────────────────────────
-                            Container(
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(12),
-                                border:
-                                    Border.all(color: Colors.grey.shade200),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Padding(
-                                    padding: const EdgeInsets.fromLTRB(
-                                        20, 18, 20, 0),
-                                    child: Text(
-                                      'DAFTAR BERITA COMMUNITY',
-                                      style: GoogleFonts.inter(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
-                                        color: AppColors.textGrey,
-                                        letterSpacing: 0.8,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
+                            // LayoutBuilder supaya tabel bisa menyesuaikan
+                            // diri di lebar tablet: kolom TANGGAL disembunyikan
+                            // dan kolom STATUS diberi ruang lebih saat layar
+                            // sempit, supaya tidak overflow.
+                            LayoutBuilder(
+                              builder: (context, constraints) {
+                                final isCompact =
+                                    constraints.maxWidth < 640;
 
-                                  // Header row
-                                  Container(
-                                    color: const Color(0xFFF8FAFC),
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 20, vertical: 10),
-                                    child: Row(
-                                      children: const [
-                                        Expanded(
-                                            flex: 4,
-                                            child: _ColH('JUDUL BERITA')),
-                                        Expanded(
-                                            flex: 2,
-                                            child: _ColH('KATEGORI')),
-                                        Expanded(
-                                            flex: 2,
-                                            child: _ColH('TANGGAL')),
-                                        Expanded(
-                                            flex: 2,
-                                            child: _ColH('STATUS')),
-                                        SizedBox(
-                                            width: 60,
-                                            child: _ColH('AKSI')),
-                                      ],
-                                    ),
+                                return Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                        color: Colors.grey.shade200),
                                   ),
-
-                                  // Data rows
-                                  if (pageItems.isEmpty)
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                          vertical: 40),
-                                      child: Center(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Padding(
+                                        padding: const EdgeInsets.fromLTRB(
+                                            20, 18, 20, 0),
                                         child: Text(
-                                          'Belum ada berita.',
+                                          'DAFTAR BERITA COMMUNITY',
                                           style: GoogleFonts.inter(
-                                              fontSize: 13,
-                                              color: AppColors.textGrey),
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.textGrey,
+                                            letterSpacing: 0.8,
+                                          ),
                                         ),
                                       ),
-                                    )
-                                  else
-                                    ...pageItems.map((item) =>
-                                        _BeritaRow(
-                                          item: item,
-                                          onDeleted: () =>
-                                              setState(() {}),
-                                        )),
+                                      const SizedBox(height: 12),
 
-                                  // Pagination
-                                  _PaginationBar(
-                                    currentPage: page,
-                                    totalItems: total,
-                                    perPage: _perPage,
-                                    onPageChanged: (p) =>
-                                        setState(() => _currentPage = p),
+                                      // Header row
+                                      Container(
+                                        color: const Color(0xFFF8FAFC),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 20, vertical: 10),
+                                        child: Row(
+                                          children: [
+                                            const Expanded(
+                                                flex: 4,
+                                                child:
+                                                    _ColH('JUDUL BERITA')),
+                                            const Expanded(
+                                                flex: 2,
+                                                child: _ColH('KATEGORI')),
+                                            if (!isCompact)
+                                              const Expanded(
+                                                  flex: 2,
+                                                  child: _ColH('TANGGAL')),
+                                            Expanded(
+                                                flex: isCompact ? 3 : 2,
+                                                child:
+                                                    const _ColH('STATUS')),
+                                            const SizedBox(
+                                                width: 70,
+                                                child: _ColH('AKSI')),
+                                          ],
+                                        ),
+                                      ),
+
+                                      // Data rows
+                                      if (pageItems.isEmpty)
+                                        Padding(
+                                          padding:
+                                              const EdgeInsets.symmetric(
+                                                  vertical: 40),
+                                          child: Center(
+                                            child: Text(
+                                              'Belum ada berita.',
+                                              style: GoogleFonts.inter(
+                                                  fontSize: 13,
+                                                  color:
+                                                      AppColors.textGrey),
+                                            ),
+                                          ),
+                                        )
+                                      else
+                                        ...pageItems.map((item) =>
+                                            _BeritaRow(
+                                              item: item,
+                                              isCompact: isCompact,
+                                              onDeleted: () =>
+                                                  setState(() {}),
+                                            )),
+
+                                      // Pagination
+                                      _PaginationBar(
+                                        currentPage: page,
+                                        totalItems: total,
+                                        perPage: _perPage,
+                                        onPageChanged: (p) => setState(
+                                            () => _currentPage = p),
+                                      ),
+                                    ],
                                   ),
-                                ],
-                              ),
+                                );
+                              },
                             ),
                           ],
                         ),
@@ -355,9 +373,17 @@ class _ColH extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _BeritaRow extends StatefulWidget {
-  const _BeritaRow({required this.item, required this.onDeleted});
+  const _BeritaRow({
+    required this.item,
+    required this.onDeleted,
+    this.isCompact = false,
+  });
   final BeritaDoc item;
   final VoidCallback onDeleted;
+
+  /// true di lebar tablet sempit — sembunyikan kolom Tanggal & beri kolom
+  /// Status flex lebih besar (lihat header row di AdminBeritaPage).
+  final bool isCompact;
 
   @override
   State<_BeritaRow> createState() => _BeritaRowState();
@@ -492,20 +518,25 @@ class _BeritaRowState extends State<_BeritaRow> {
               ),
             ),
 
-            // Tanggal
-            Expanded(
-              flex: 2,
-              child: Text(item.tanggalFormatted,
-                  style: GoogleFonts.inter(
-                      fontSize: 12, color: AppColors.textGrey)),
-            ),
+            // Tanggal — disembunyikan di lebar tablet sempit
+            if (!widget.isCompact)
+              Expanded(
+                flex: 2,
+                child: Text(item.tanggalFormatted,
+                    style: GoogleFonts.inter(
+                        fontSize: 12, color: AppColors.textGrey)),
+              ),
 
-            // Status
-            Expanded(flex: 2, child: _StatusBadge(item.isPublished)),
+            // Status — diberi flex lebih besar saat compact supaya tidak
+            // overflow (lihat juga _StatusBadge yang sudah dibuat fleksibel).
+            Expanded(
+              flex: widget.isCompact ? 3 : 2,
+              child: _StatusBadge(item.isPublished),
+            ),
 
             // Aksi
             SizedBox(
-              width: 60,
+              width: 70,
               child: Row(
                 children: [
                   _AksiBtn(
@@ -592,15 +623,22 @@ class _StatusBadge extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 6),
-        Text(
-          isPublished ? 'PUBLISHED' : 'DRAFT',
-          style: GoogleFonts.inter(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: isPublished
-                ? const Color(0xFF16A34A)
-                : Colors.grey.shade500,
-            letterSpacing: 0.3,
+        // Flexible (bukan cuma Text biasa) — supaya teks "PUBLISHED"/"DRAFT"
+        // bisa menyusut/elipsis kalau kolom Status menyempit di lebar
+        // tablet, alih-alih bikin Row ini overflow ke kanan.
+        Flexible(
+          child: Text(
+            isPublished ? 'PUBLISHED' : 'DRAFT',
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: isPublished
+                  ? const Color(0xFF16A34A)
+                  : Colors.grey.shade500,
+              letterSpacing: 0.3,
+            ),
           ),
         ),
       ],

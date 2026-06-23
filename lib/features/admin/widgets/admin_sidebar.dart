@@ -17,8 +17,6 @@ enum AdminPage {
   billing,
   reports,
   berita,
-  settings,
-  support,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -95,19 +93,6 @@ const _mainNavItems = [
   ),
 ];
 
-const _bottomNavItems = [
-  _NavItemData(
-    page: AdminPage.settings,
-    icon: Icons.settings_outlined,
-    label: 'Settings',
-  ),
-  _NavItemData(
-    page: AdminPage.support,
-    icon: Icons.help_outline,
-    label: 'Support',
-  ),
-];
-
 // ─────────────────────────────────────────────────────────────────────────────
 // AdminSidebar — reusable di semua halaman admin
 //
@@ -170,18 +155,6 @@ class AdminSidebar extends StatelessWidget {
                         onTap: () => _navigate(context, item),
                       ))
                   .toList(),
-            ),
-          ),
-
-          // ── Divider ────────────────────────────────────────────────────
-          Divider(height: 1, color: Colors.grey.shade200),
-
-          // ── Bottom nav (Settings, Support) ─────────────────────────────
-          ..._bottomNavItems.map(
-            (item) => _NavTile(
-              data: item,
-              isActive: item.page == activePage,
-              onTap: () => _navigate(context, item),
             ),
           ),
           const SizedBox(height: 16),

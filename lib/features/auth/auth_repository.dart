@@ -3,6 +3,7 @@
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../pembayaran/data/payment_repository.dart';
 
 // ── Model hasil login ────────────────────────────────────────────────────────
 class AuthResult {
@@ -76,6 +77,54 @@ class AuthRepository {
 
   /// UID akun Firebase yang sedang login (null bila belum login).
   static String? get currentUid => FirebaseAuth.instance.currentUser?.uid;
+
+  // ── Restore session saat app dibuka kembali ───────────────────────────────
+  /// Dipanggil dari SplashScreen. Cek apakah Firebase Auth masih punya token
+  /// valid (disimpan otomatis oleh SDK). Kalau ada → fetch data Firestore →
+  /// isi _currentUser. Return true = sesi berhasil dipulihkan, false = perlu login.
+  static Future<bool> tryRestoreSession() async {
+    try {
+      final firebaseUser = FirebaseAuth.instance.currentUser;
+      if (firebaseUser == null) return false;
+
+      // Token mungkin expired — refresh dulu (throws kalau akun dihapus/disabled)
+      await firebaseUser.reload();
+
+      // Fetch data Firestore
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(firebaseUser.uid)
+          .get();
+
+      if (!doc.exists) return false;
+
+      final data = doc.data()!;
+      final role = _parseRole(data['role'] as String?);
+      final namaLengkap =
+          (data['namaLengkap'] as String?)?.isNotEmpty == true
+              ? data['namaLengkap'] as String
+              : (firebaseUser.displayName ?? 'Pengguna');
+
+      _currentUser = AuthResult(
+        username    : data['username']     as String? ?? '',
+        namaLengkap : namaLengkap,
+        blok        : data['blok']         as String? ?? '-',
+        nomorUnit   : data['nomorUnit']    as String? ?? '-',
+        role        : role,
+        email       : data['email']        as String? ?? '',
+        nomorHp     : data['nomorHp']      as String? ?? '-',
+        tanggalLahir: data['tanggalLahir'] as String? ?? '-',
+        photoUrl    : (data['photoUrl'] as String?)?.isNotEmpty == true
+            ? data['photoUrl'] as String
+            : firebaseUser.photoURL,
+      );
+
+      return true;
+    } catch (_) {
+      // Token expired, akun dihapus, atau tidak ada koneksi — minta login ulang
+      return false;
+    }
+  }
 
   // ── Logout — bersihkan in-memory session ──────────────────────────────────
   static void clearUser() => _currentUser = null;
@@ -251,6 +300,18 @@ class AuthRepository {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
+      // 6. Auto-buat tagihan bulan ini untuk user baru (silent — jangan
+      //    gagalkan registrasi kalau tagihan gagal dibuat)
+      try {
+        await PaymentRepository.ensureCurrentMonthTagihan(
+          userId: uid,
+          namaResiden: namaLengkap,
+          nomorHp: nomorHp.trim(),
+          blok: blok,
+          nomorUnit: nomorUnit,
+        );
+      } catch (_) {}
+
       return null; // null = sukses
     } on FirebaseAuthException catch (e) {
       if (e.code == 'email-already-in-use') return 'Username sudah digunakan';
@@ -262,28 +323,35 @@ class AuthRepository {
   }
 
   // ── Reset Password ────────────────────────────────────────────────────────
-  // Langsung kirim via Firebase Auth — tidak perlu cek Firestore dulu
+  // Langsung kirim via Firebase Auth — TANPA cek Firestore dulu.
+  //
+  // Sengaja tidak query koleksi 'users' di sini: halaman lupa password
+  // dipakai oleh user yang BELUM login, sementara Firestore Rules untuk
+  // 'users' mensyaratkan request.auth != null untuk operasi list/query
+  // (lihat allow list di rules). Query email-lookup akan selalu kena
+  // permission-denied dalam kondisi belum login — itu sebabnya fitur ini
+  // sebelumnya selalu gagal dengan pesan generik.
+  //
+  // Firebase Auth sendiri sudah aman dipakai langsung: kalau email tidak
+  // terdaftar, secara default akan melempar 'user-not-found' (atau, kalau
+  // Email Enumeration Protection aktif di project, akan tetap return
+  // sukses tanpa membocorkan status pendaftaran — ini perilaku standar
+  // Firebase untuk mencegah orang lain menebak-nebak email mana yang
+  // terdaftar).
   static Future<String?> resetPassword(String email) async {
     try {
       final cleanEmail = email.trim().toLowerCase();
-
-      // Langkah 1: cek apakah email terdaftar di Firestore
-      final snap = await FirebaseFirestore.instance
-          .collection('users')
-          .where('email', isEqualTo: cleanEmail)
-          .limit(1)
-          .get();
-
-      if (snap.docs.isEmpty) {
-        return 'Email tidak terdaftar. Periksa kembali alamat email Anda.';
-      }
-
-      // Langkah 2: kirim link reset
       await FirebaseAuth.instance.sendPasswordResetEmail(email: cleanEmail);
       return null; // null = sukses
     } on FirebaseAuthException catch (e) {
-      if (e.code == 'invalid-email') return 'Format email tidak valid';
-      return e.message ?? 'Terjadi kesalahan. Coba lagi.';
+      switch (e.code) {
+        case 'invalid-email':
+          return 'Format email tidak valid';
+        case 'user-not-found':
+          return 'Email tidak terdaftar. Periksa kembali alamat email Anda.';
+        default:
+          return e.message ?? 'Terjadi kesalahan. Coba lagi.';
+      }
     } catch (e) {
       return 'Terjadi kesalahan. Coba lagi.';
     }

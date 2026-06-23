@@ -2,7 +2,7 @@
 // Mengikuti pola static-method seperti AuthRepository.
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'tagihan_model.dart';
+import '../models/tagihan_model.dart';
 
 class PaymentRepository {
   PaymentRepository._();
@@ -57,6 +57,28 @@ class PaymentRepository {
     if (metodeBayar != null) data['metodeBayar'] = metodeBayar;
     if (orderId != null) data['orderId'] = orderId;
 
+    await _db.collection(_collection).doc(tagihanId).update(data);
+  }
+
+  /// Update status tagihan secara manual oleh admin (mis. pembayaran tunai).
+  ///
+  /// - Ke `lunas`     : catat tanggalBayar = hari ini, metodeBayar = 'Tunai (Manual)'
+  /// - Ke `belumBayar`: hapus tanggalBayar, metodeBayar, orderId
+  static Future<void> setStatusManual({
+    required String tagihanId,
+    required StatusTagihan status,
+  }) async {
+    final data = <String, dynamic>{
+      'status': statusTagihanToString(status),
+    };
+    if (status == StatusTagihan.lunas) {
+      data['tanggalBayar'] = _formatToday();
+      data['metodeBayar']  = 'Tunai (Manual)';
+    } else {
+      data['tanggalBayar'] = null;
+      data['metodeBayar']  = null;
+      data['orderId']      = null;
+    }
     await _db.collection(_collection).doc(tagihanId).update(data);
   }
 

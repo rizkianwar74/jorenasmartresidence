@@ -6,7 +6,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/router/app_router.dart';
 import '../../shared/widgets/bottom_nav_bar.dart';
 import 'data/komunitas_repository.dart';
-import 'warga_model.dart';
+import 'models/warga_model.dart';
 import 'widgets/blok_filter_chips.dart';
 import 'widgets/warga_list_item.dart';
 
@@ -229,9 +229,19 @@ class _KomunitasPageState extends State<KomunitasPage> {
 // Modal Sheet
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _WargaDetailSheet extends StatelessWidget {
+class _WargaDetailSheet extends StatefulWidget {
   const _WargaDetailSheet({required this.warga});
   final WargaModel warga;
+
+  @override
+  State<_WargaDetailSheet> createState() => _WargaDetailSheetState();
+}
+
+class _WargaDetailSheetState extends State<_WargaDetailSheet> {
+  // Sama seperti WargaListItem — fallback ke inisial kalau gambar gagal load.
+  bool _imageFailed = false;
+
+  WargaModel get warga => widget.warga;
 
   Future<void> _openWhatsApp(BuildContext context) async {
     final uri = Uri.parse('https://wa.me/${warga.waNumber}');
@@ -273,29 +283,34 @@ class _WargaDetailSheet extends StatelessWidget {
           ),
           const SizedBox(height: 24),
 
-          // Avatar + nama
-          CircleAvatar(
-            radius: 36,
-            backgroundColor: AppColors.primary.withValues(alpha: 0.15),
-            backgroundImage: warga.photoUrl != null
-                ? NetworkImage(warga.photoUrl!)
-                : null,
-            onBackgroundImageError: warga.photoUrl != null
-                ? (_, __) {}
-                : null,
-            child: warga.photoUrl == null
-                ? Text(
-                    warga.namaLengkap.isNotEmpty
-                        ? warga.namaLengkap[0].toUpperCase()
-                        : '?',
-                    style: TextStyle(
-                      color: AppColors.primary,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 28,
-                    ),
-                  )
-                : null,
-          ),
+          // Avatar + nama — avatarImageProvider sudah aware base64 & http URL
+          Builder(builder: (_) {
+            final provider = _imageFailed ? null : warga.avatarImageProvider;
+            return CircleAvatar(
+              radius: 36,
+              backgroundColor: AppColors.primary.withValues(alpha: 0.15),
+              backgroundImage: provider,
+              onBackgroundImageError: provider != null
+                  ? (_, __) {
+                      if (mounted && !_imageFailed) {
+                        setState(() => _imageFailed = true);
+                      }
+                    }
+                  : null,
+              child: provider == null
+                  ? Text(
+                      warga.namaLengkap.isNotEmpty
+                          ? warga.namaLengkap[0].toUpperCase()
+                          : '?',
+                      style: TextStyle(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 28,
+                      ),
+                    )
+                  : null,
+            );
+          }),
           const SizedBox(height: 12),
 
           Text(

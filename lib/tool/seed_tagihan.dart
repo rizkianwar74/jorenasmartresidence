@@ -1,14 +1,16 @@
-// Helper dev: seed data tagihan ke Firestore.
+// Helper seed data tagihan ke Firestore.
 //
-// Cara pakai: panggil SeedTagihan.run() dari tempat sementara
-// (mis. tombol debug di admin, atau langsung di main() pakai flag).
-// Setelah data ada, hapus pemanggilan.
+// Dua entry point utama:
+//   SeedTagihan.run()                — seed manual (tombol admin)
+//   SeedTagihan.autoSeedIfNeeded()   — dipanggil saat admin buka billing page;
+//                                      cek Firestore apakah bulan ini sudah
+//                                      di-seed, kalau belum jalankan otomatis.
 //
 // Membuat 1 tagihan aktif untuk setiap user (role: user/satpam)
 // di collection 'tagihan', periode bulan berjalan.
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'payment_repository.dart';
+import '../features/pembayaran/data/payment_repository.dart';
 
 class SeedTagihan {
   SeedTagihan._();
@@ -47,8 +49,8 @@ class SeedTagihan {
       final data = doc.data();
       final role = data['role'] as String? ?? 'user';
 
-      // Admin tidak perlu tagihan iuran.
-      if (role == 'admin') continue;
+      // Hanya warga (role: user) yang ditagih iuran.
+      if (role != 'user') continue;
 
       final uid = doc.id;
       final nama = (data['namaLengkap'] as String?)?.isNotEmpty == true
@@ -83,6 +85,39 @@ class SeedTagihan {
     // ignore: avoid_print
     print('[Seed] Selesai. $created tagihan dibuat.');
     return created;
+  }
+
+  /// Auto-seed bulanan tanpa interaksi admin.
+  ///
+  /// Dipanggil tiap kali admin membuka halaman Billing. Logika:
+  /// - Baca doc `config/tagihan_seed` di Firestore.
+  /// - Kalau `lastSeededYear` == tahun ini DAN `lastSeededMonth` == bulan ini
+  ///   → sudah di-seed bulan ini, tidak lakukan apa-apa.
+  /// - Kalau belum → panggil run() → update `config/tagihan_seed`.
+  ///
+  /// Dengan cara ini seed hanya jalan sekali per bulan (saat admin pertama
+  /// kali buka billing), tanpa perlu Cloud Functions.
+  static Future<void> autoSeedIfNeeded() async {
+    final db = FirebaseFirestore.instance;
+    final now = DateTime.now();
+
+    final configRef = db.collection('config').doc('tagihan_seed');
+    final configSnap = await configRef.get();
+
+    if (configSnap.exists) {
+      final data = configSnap.data()!;
+      final lastYear  = data['lastSeededYear']  as int? ?? 0;
+      final lastMonth = data['lastSeededMonth'] as int? ?? 0;
+      if (lastYear == now.year && lastMonth == now.month) return; // sudah
+    }
+
+    // Belum di-seed bulan ini — jalankan
+    await run();
+    await configRef.set({
+      'lastSeededYear' : now.year,
+      'lastSeededMonth': now.month,
+      'lastSeededAt'   : FieldValue.serverTimestamp(),
+    });
   }
 
   /// Hapus SEMUA tagihan (dev reset).

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import '../auth/auth_repository.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/responsive_helper.dart';
-import 'tagihan_model.dart';
+import 'models/tagihan_model.dart';
 import 'payment_webview_page.dart';
-import 'payment_repository.dart';
+import 'data/payment_repository.dart';
 
 class TagihanPage extends StatelessWidget {
   const TagihanPage({super.key});
@@ -15,7 +15,7 @@ class TagihanPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hPad = Responsive.value<double>(context, mobile: 24, tablet: 32);
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = AuthRepository.currentUid;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7F8),
@@ -38,11 +38,20 @@ class TagihanPage extends StatelessWidget {
         ),
         centerTitle: true,
       ),
-      body: Center(
+      // Align(topCenter) — bukan Center — supaya konten mulai dari atas,
+      // bukan ter-center vertikal di tengah layar saat kontennya pendek
+      // (mis. cuma kartu "Semua Tagihan Lunas" + 1 riwayat).
+      //
+      // Halaman ini cuma reachable lewat navigasi dari home yang sudah
+      // auth-gated, jadi uid == null seharusnya tidak pernah terjadi di
+      // praktiknya — tapi tetap ditangani secara aman (anggap kosong,
+      // BUKAN data mock) kalau-kalau sesi sempat hilang.
+      body: Align(
+        alignment: Alignment.topCenter,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: _contentMaxWidth),
           child: uid == null
-              ? _buildFallback(context, hPad)
+              ? _buildContent(context, hPad, const [])
               : StreamBuilder<List<TagihanModel>>(
                   stream: PaymentRepository.watchUserTagihan(uid),
                   builder: (context, snap) {
@@ -51,80 +60,12 @@ class TagihanPage extends StatelessWidget {
                           child: CircularProgressIndicator(
                               color: AppColors.primary));
                     }
-                    if (snap.hasError || !snap.hasData || snap.data!.isEmpty) {
-                      return _buildFallback(context, hPad);
-                    }
-
-                    final list = snap.data!;
-                    // Semua bulan yang belum lunas (urut dari paling lama) —
-                    // ini yang akan digabung jadi satu total tunggakan.
-                    final aktif = list.unpaidSorted;
-                    final riwayat =
-                        list.where((t) => t.status == StatusTagihan.lunas).toList();
-
-                    return SingleChildScrollView(
-                      padding: EdgeInsets.fromLTRB(hPad, 16, hPad, 32),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (aktif.isNotEmpty)
-                            _TagihanAktifCard(
-                              tagihanList: aktif,
-                              onBayar: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      PaymentWebViewPage(tagihanList: aktif),
-                                ),
-                              ),
-                            )
-                          else
-                            const _EmptyPaidCard(),
-
-                          const SizedBox(height: 28),
-
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'Riwayat Pembayaran',
-                                style: GoogleFonts.inter(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.textDark,
-                                ),
-                              ),
-                              Text(
-                                '${riwayat.length} transaksi',
-                                style: GoogleFonts.inter(
-                                    fontSize: 12, color: AppColors.textGrey),
-                              ),
-                            ],
-                          ),
-
-                          const SizedBox(height: 12),
-
-                          if (riwayat.isEmpty)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 24),
-                              child: Center(
-                                child: Text(
-                                  'Belum ada riwayat pembayaran.',
-                                  style: GoogleFonts.inter(
-                                      fontSize: 13, color: AppColors.textGrey),
-                                ),
-                              ),
-                            )
-                          else
-                            ...riwayat.map(
-                              (t) => Padding(
-                                padding: const EdgeInsets.only(bottom: 10),
-                                child: _RiwayatCard(tagihan: t),
-                              ),
-                            ),
-                        ],
-                      ),
-                    );
+                    // Error ATAU memang belum ada dokumen tagihan sama sekali
+                    // — keduanya dianggap "tidak ada tagihan", BUKAN data
+                    // palsu. Tidak ada lagi mock yang bisa memicu transaksi
+                    // Midtrans sungguhan atas data fiktif.
+                    final list = snap.data ?? const <TagihanModel>[];
+                    return _buildContent(context, hPad, list);
                   },
                 ),
         ),
@@ -132,22 +73,34 @@ class TagihanPage extends StatelessWidget {
     );
   }
 
-  Widget _buildFallback(BuildContext context, double hPad) {
+  Widget _buildContent(
+      BuildContext context, double hPad, List<TagihanModel> list) {
+    // Semua bulan yang belum lunas (urut dari paling lama) — ini yang akan
+    // digabung jadi satu total tunggakan.
+    final aktif = list.unpaidSorted;
+    final riwayat = list.where((t) => t.status == StatusTagihan.lunas).toList();
+
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(hPad, 16, hPad, 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _TagihanAktifCard(
-            tagihanList: [mockTagihanAktif],
-            onBayar: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) =>
-                    PaymentWebViewPage(tagihanList: [mockTagihanAktif]),
+          if (aktif.isNotEmpty)
+            _TagihanAktifCard(
+              tagihanList: aktif,
+              onBayar: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => PaymentWebViewPage(tagihanList: aktif),
+                ),
               ),
-            ),
-          ),
+            )
+          else if (list.isEmpty)
+            // Belum ada dokumen tagihan sama sekali untuk akun ini.
+            const _NoTagihanCard()
+          else
+            // Ada riwayat, tapi semua sudah lunas — tidak ada yang aktif.
+            const _EmptyPaidCard(),
 
           const SizedBox(height: 28),
 
@@ -163,18 +116,84 @@ class TagihanPage extends StatelessWidget {
                 ),
               ),
               Text(
-                '${mockRiwayatTagihan.length} transaksi',
-                style: GoogleFonts.inter(fontSize: 12, color: AppColors.textGrey),
+                '${riwayat.length} transaksi',
+                style: GoogleFonts.inter(
+                    fontSize: 12, color: AppColors.textGrey),
               ),
             ],
           ),
 
           const SizedBox(height: 12),
 
-          ...mockRiwayatTagihan.map(
-            (t) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: _RiwayatCard(tagihan: t),
+          if (riwayat.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Center(
+                child: Text(
+                  'Belum ada riwayat pembayaran.',
+                  style: GoogleFonts.inter(
+                      fontSize: 13, color: AppColors.textGrey),
+                ),
+              ),
+            )
+          else
+            ...riwayat.map(
+              (t) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _RiwayatCard(tagihan: t),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Kartu saat memang belum ada tagihan sama sekali ──────────────────────────
+class _NoTagihanCard extends StatelessWidget {
+  const _NoTagihanCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.receipt_long_outlined,
+                color: Colors.grey.shade500, size: 24),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Tidak Ada Tagihan',
+                  style: GoogleFonts.inter(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textDark,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Belum ada data tagihan untuk akun Anda.',
+                  style: GoogleFonts.inter(
+                      fontSize: 12, color: AppColors.textGrey),
+                ),
+              ],
             ),
           ),
         ],

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/router/app_router.dart';
+import '../auth/auth_repository.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -66,14 +67,23 @@ class _SplashScreenState extends State<SplashScreen>
 
     _controller.forward();
 
-    // Navigasi ke Home setelah 3 detik
-    Future.delayed(const Duration(milliseconds: 3000), () {
+    // Cek sesi Firebase Auth + navigasi setelah minimal 3 detik splash
+    Future.wait([
+      Future.delayed(const Duration(milliseconds: 3000)),
+      AuthRepository.tryRestoreSession(),
+    ]).then((results) {
       if (!mounted) return;
 
       // Kembalikan status bar sebelum pindah halaman
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
-      Navigator.pushReplacementNamed(context, AppRouter.login);
+      final sessionRestored = results[1] as bool;
+      Navigator.pushReplacementNamed(
+        context,
+        // Sesi valid → langsung ke home (router handle redirect per role)
+        // Sesi tidak ada/expired → ke login
+        sessionRestored ? AppRouter.home : AppRouter.login,
+      );
     });
   }
 

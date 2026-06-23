@@ -6,8 +6,8 @@ import 'package:webview_flutter/webview_flutter.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/data/midtrans_service.dart';
 import '../auth/auth_repository.dart';
-import 'tagihan_model.dart';
-import 'payment_repository.dart';
+import 'models/tagihan_model.dart';
+import 'data/payment_repository.dart';
 import 'payment_status_page.dart';
 
 class PaymentWebViewPage extends StatefulWidget {

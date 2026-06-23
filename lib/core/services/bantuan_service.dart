@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
@@ -24,6 +27,7 @@ class BantuanRequest {
     required this.catatan,
     required this.status,
     required this.createdAt,
+    this.fotoUrls = const [],
     this.respondedBy,
     this.resolvedAt,
   });
@@ -37,6 +41,7 @@ class BantuanRequest {
   final String catatan;
   final BantuanStatus status;
   final DateTime createdAt;
+  final List<String> fotoUrls;
   final String? respondedBy;
   final DateTime? resolvedAt;
 
@@ -52,6 +57,7 @@ class BantuanRequest {
   // ── Dari Firestore → BantuanRequest (sama persis dengan SosAlert.fromDoc) ──
   factory BantuanRequest.fromDoc(DocumentSnapshot doc) {
     final d = doc.data() as Map<String, dynamic>;
+    final rawFotos = d['fotoUrls'];
     return BantuanRequest(
       id          : doc.id,
       uid         : d['uid']       as String? ?? '',
@@ -62,6 +68,7 @@ class BantuanRequest {
       catatan     : d['catatan']   as String? ?? '',
       status      : _parseStatus(d['status'] as String?),
       createdAt   : (d['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      fotoUrls    : rawFotos is List ? rawFotos.whereType<String>().toList() : const [],
       respondedBy : d['respondedBy'] as String?,
       resolvedAt  : (d['resolvedAt'] as Timestamp?)?.toDate(),
     );
@@ -129,9 +136,22 @@ class BantuanService {
 
   // ── Kirim request bantuan baru ────────────────────────────────────────────
   // Setelah berhasil: _activeRequestId di-set otomatis (sama seperti SOS)
+  //
+  // [fotos] opsional — disimpan LANGSUNG sebagai data URI base64 di field
+  // `fotoUrls` pada dokumen Firestore yang sama, TIDAK lewat Firebase
+  // Storage. Ini sengaja disamakan dengan pola foto profil
+  // (AuthRepository.updatePhotoUrl) dan berita (admin_berita_form_page) di
+  // app ini — selain konsisten, ini juga menghindari error CORS Firebase
+  // Storage yang muncul saat upload dari Flutter Web.
+  //
+  // Catatan: karena base64 disimpan langsung di dokumen, total ukuran ke-3
+  // foto digabung sebaiknya tidak mendekati limit 1MB per dokumen Firestore
+  // — image_picker di form sudah di-kompres (quality 60, max 800x600) untuk
+  // menjaga ukurannya kecil.
   static Future<BantuanRequest?> sendRequest({
     required String kategori,
     String catatan = '',
+    List<Uint8List> fotos = const [],
   }) async {
     try {
       final firebaseUser = FirebaseAuth.instance.currentUser;
@@ -156,6 +176,10 @@ class BantuanService {
         nomorUnit = (d['nomorUnit'] as String?) ?? '-';
       }
 
+      final fotoDataUris = fotos
+          .map((bytes) => 'data:image/jpeg;base64,${base64Encode(bytes)}')
+          .toList();
+
       final ref = await _col.add({
         'uid'        : uid,
         'namaWarga'  : namaWarga,
@@ -164,6 +188,7 @@ class BantuanService {
         'kategori'   : kategori,
         'catatan'    : catatan,
         'status'     : 'PENDING',
+        'fotoUrls'   : fotoDataUris,
         'createdAt'  : FieldValue.serverTimestamp(),
         'respondedBy': null,
         'resolvedAt' : null,
@@ -182,6 +207,7 @@ class BantuanService {
         catatan   : catatan,
         status    : BantuanStatus.pending,
         createdAt : DateTime.now(),
+        fotoUrls  : fotoDataUris,
       );
     } catch (_) {
       return null;
@@ -196,7 +222,8 @@ class BantuanService {
   }) async {
     try {
       final data = <String, dynamic>{'status': _statusString(status)};
-      if (status == BantuanStatus.onMyWay && respondedBy != null) {
+      // Satpam yang merespons "mengklaim" request (keluar dari kolam bersama).
+      if (respondedBy != null) {
         data['respondedBy'] = respondedBy;
       }
       if (status == BantuanStatus.resolved) {
@@ -306,5 +333,74 @@ class BantuanService {
           list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
           return list;
         });
+  }
+
+  // ── Kolam bersama: request PENDING yang belum direspons satpam mana pun ────
+  static Stream<List<BantuanRequest>> watchUnrespondedPending() {
+    return _col
+        .where('status', isEqualTo: 'PENDING')
+        .snapshots()
+        .map((snap) {
+          final list = <BantuanRequest>[];
+          for (final doc in snap.docs) {
+            try {
+              final r = BantuanRequest.fromDoc(doc);
+              if (r.respondedBy == null || r.respondedBy!.isEmpty) list.add(r);
+            } catch (e) {
+              debugPrint('[BantuanService] skip ${doc.id}: $e');
+            }
+          }
+          list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return list;
+        });
+  }
+
+  // ── Request aktif yang sudah direspons satpam tertentu ────────────────────
+  static Stream<List<BantuanRequest>> watchRespondedBy(String satpamUid) {
+    return _col
+        .where('respondedBy', isEqualTo: satpamUid)
+        .snapshots()
+        .map((snap) {
+          final list = <BantuanRequest>[];
+          for (final doc in snap.docs) {
+            try {
+              final r = BantuanRequest.fromDoc(doc);
+              if (r.status == BantuanStatus.pending ||
+                  r.status == BantuanStatus.onMyWay) list.add(r);
+            } catch (e) {
+              debugPrint('[BantuanService] skip ${doc.id}: $e');
+            }
+          }
+          list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return list;
+        });
+  }
+
+  // ── Inbox satpam ──────────────────────────────────────────────────────────
+  // includeShared=true (BERTUGAS): kolam bersama (PENDING belum direspons) +
+  //   request yang sudah dia respons. includeShared=false (OFF-DUTY): hanya
+  //   yang sudah dia respons (agar tetap bisa menyelesaikannya).
+  static Stream<List<BantuanRequest>> watchSatpamInbox(
+    String satpamUid, {
+    required bool includeShared,
+  }) {
+    if (!includeShared) return watchRespondedBy(satpamUid);
+
+    final controller = StreamController<List<BantuanRequest>>();
+    var mine   = <BantuanRequest>[];
+    var shared = <BantuanRequest>[];
+    void emit() {
+      final byId = <String, BantuanRequest>{};
+      for (final r in [...mine, ...shared]) {
+        byId[r.id] = r;
+      }
+      final merged = byId.values.toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      if (!controller.isClosed) controller.add(merged);
+    }
+    final s1 = watchRespondedBy(satpamUid).listen((l) { mine = l; emit(); });
+    final s2 = watchUnrespondedPending().listen((l) { shared = l; emit(); });
+    controller.onCancel = () { s1.cancel(); s2.cancel(); };
+    return controller.stream;
   }
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -855,44 +856,11 @@ class _FotoPanel extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                   child: Stack(
                     children: [
-                      Image.network(
-                        url,
+                      _ReportFotoImage(
+                        url: url,
                         width: double.infinity,
                         height: 160,
                         fit: BoxFit.cover,
-                        loadingBuilder: (_, child, progress) {
-                          if (progress == null) return child;
-                          return Container(
-                            width: double.infinity,
-                            height: 160,
-                            color: Colors.grey.shade100,
-                            child: Center(
-                              child: CircularProgressIndicator(
-                                value: progress.expectedTotalBytes != null
-                                    ? progress.cumulativeBytesLoaded /
-                                        progress.expectedTotalBytes!
-                                    : null,
-                                strokeWidth: 2,
-                              ),
-                            ),
-                          );
-                        },
-                        errorBuilder: (_, __, ___) => Container(
-                          width: double.infinity,
-                          height: 160,
-                          color: Colors.grey.shade100,
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.broken_image_outlined,
-                                  size: 28, color: Colors.grey.shade400),
-                              const SizedBox(height: 4),
-                              Text('Gagal memuat',
-                                  style: GoogleFonts.inter(
-                                      fontSize: 11, color: AppColors.textGrey)),
-                            ],
-                          ),
-                        ),
                       ),
                       // Overlay: zoom icon
                       Positioned(
@@ -999,15 +967,10 @@ class _FotoFullscreenState extends State<_FotoFullscreen> {
           // Image
           ClipRRect(
             borderRadius: BorderRadius.circular(12),
-            child: Image.network(
-              widget.urls[_current],
+            child: _ReportFotoImage(
+              url: widget.urls[_current],
               fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => Container(
-                height: 200,
-                color: Colors.grey.shade800,
-                child: const Icon(Icons.broken_image_outlined,
-                    color: Colors.white54, size: 48),
-              ),
+              dark: true,
             ),
           ),
 
@@ -1058,5 +1021,89 @@ class _NavBtn extends StatelessWidget {
       ),
     );
   }
+}
+
+// ── Gambar foto keluhan — aware base64 (data URI) maupun URL http biasa.
+// KeluhanService.sendKeluhan kini menyimpan base64, sama seperti foto
+// profil/bantuan/patroli — Image.network saja tidak bisa decode itu.
+class _ReportFotoImage extends StatelessWidget {
+  const _ReportFotoImage({
+    required this.url,
+    this.width,
+    this.height,
+    this.fit = BoxFit.cover,
+    this.dark = false,
+  });
+  final String url;
+  final double? width;
+  final double? height;
+  final BoxFit fit;
+  final bool dark;
+
+  bool get _isBase64 => url.startsWith('data:image');
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isBase64) {
+      try {
+        final bytes = base64Decode(url.split(',').last);
+        return Image.memory(
+          bytes,
+          width: width,
+          height: height,
+          fit: fit,
+          errorBuilder: (_, __, ___) => _placeholder(),
+        );
+      } catch (_) {
+        return _placeholder();
+      }
+    }
+    return Image.network(
+      url,
+      width: width,
+      height: height,
+      fit: fit,
+      loadingBuilder: (_, child, progress) {
+        if (progress == null) return child;
+        return _loading();
+      },
+      errorBuilder: (_, __, ___) => _placeholder(),
+    );
+  }
+
+  Widget _loading() => Container(
+        width: width,
+        height: height,
+        color: dark ? Colors.grey.shade800 : Colors.grey.shade100,
+        child: Center(
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: dark ? Colors.white : null,
+            ),
+          ),
+        ),
+      );
+
+  Widget _placeholder() => Container(
+        width: width,
+        height: height,
+        color: dark ? Colors.grey.shade800 : Colors.grey.shade100,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.broken_image_outlined,
+                size: dark ? 48 : 28,
+                color: dark ? Colors.white54 : Colors.grey.shade400),
+            if (!dark) ...[
+              const SizedBox(height: 4),
+              Text('Gagal memuat',
+                  style: GoogleFonts.inter(fontSize: 11, color: AppColors.textGrey)),
+            ],
+          ],
+        ),
+      );
 }
 

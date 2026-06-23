@@ -164,46 +164,19 @@ class _AdminDaftarTamuPageState extends State<AdminDaftarTamuPage> {
           titlePadding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
           contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
           actionsPadding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
-          title: Row(
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: t.status == 'MASUK'
-                      ? const Color(0xFFEFF6FF)
-                      : const Color(0xFFF0FDF4),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(
-                  t.status == 'MASUK'
-                      ? Icons.login_rounded
-                      : Icons.logout_rounded,
-                  color: t.status == 'MASUK'
-                      ? AppColors.primary
-                      : const Color(0xFF16A34A),
-                  size: 20,
-                ),
+              Text(
+                t.namaTamu,
+                style: GoogleFonts.inter(
+                    fontWeight: FontWeight.bold, fontSize: 15),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      t.namaTamu,
-                      style: GoogleFonts.inter(
-                          fontWeight: FontWeight.bold, fontSize: 15),
-                    ),
-                    Text(
-                      t.kategoriKunjungan,
-                      style: GoogleFonts.inter(
-                          fontSize: 12, color: AppColors.textGrey),
-                    ),
-                  ],
-                ),
+              Text(
+                t.kategoriKunjungan,
+                style: GoogleFonts.inter(
+                    fontSize: 12, color: AppColors.textGrey),
               ),
-              _StatusChip(status: t.status),
             ],
           ),
           content: SizedBox(
@@ -749,48 +722,6 @@ class _TamuRow extends StatelessWidget {
               child: Text('Detail',
                   style: GoogleFonts.inter(
                       fontSize: 12, fontWeight: FontWeight.w500)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Status chip
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _StatusChip extends StatelessWidget {
-  const _StatusChip({required this.status});
-  final String status;
-
-  @override
-  Widget build(BuildContext context) {
-    final isMasuk = status == 'MASUK';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: isMasuk
-            ? const Color(0xFFEFF6FF)
-            : const Color(0xFFF0FDF4),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            isMasuk ? Icons.login_rounded : Icons.logout_rounded,
-            size: 11,
-            color: isMasuk ? AppColors.primary : const Color(0xFF16A34A),
-          ),
-          const SizedBox(width: 4),
-          Text(
-            status,
-            style: GoogleFonts.inter(
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              color: isMasuk ? AppColors.primary : const Color(0xFF16A34A),
             ),
           ),
         ],
