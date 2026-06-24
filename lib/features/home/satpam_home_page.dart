@@ -11,6 +11,7 @@ import '../../core/services/sos_notification_service.dart';
 import '../../core/services/bantuan_service.dart';
 import '../auth/auth_repository.dart';
 import '../security/data/security_repository.dart';
+import '../../core/services/onesignal_service.dart';
 import '../../shared/widgets/satpam_bottom_nav.dart';
 
 // UI dipecah ke beberapa file 'part' agar file ini tak terlalu besar,
@@ -198,6 +199,8 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
         // sendirinya hanya karena status duty lokal berubah).
         if (onDuty) await _processSosAlerts(_activeAlerts);
         await _processBantuan(_latestBantuan);
+        // Sinkronkan tag OneSignal agar penargetan notif SOS akurat.
+        OneSignalService.instance.setTag('onDuty', onDuty ? 'true' : 'false');
       }
     } catch (_) {
       if (mounted) setState(() => _loadingDuty = false);
@@ -211,6 +214,8 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
     setState(() { _savingDuty = true; _isOnDuty = value; });
     try {
       await SecurityRepository.instance.setOnDuty(uid, value);
+      // Update tag OneSignal: hanya satpam bertugas yang ditarget notif SOS.
+      OneSignalService.instance.setTag('onDuty', value ? 'true' : 'false');
       if (value) {
         // Baru ON duty — proses ulang alert aktif yang sudah ada supaya
         // tidak terlewat notifikasinya.

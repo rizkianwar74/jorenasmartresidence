@@ -6,6 +6,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
 import 'app.dart';
 import 'core/services/sos_notification_service.dart';
+import 'core/services/onesignal_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,6 +18,7 @@ Future<void> main() async {
   // Notifikasi lokal hanya tersedia di Android/iOS, tidak di Web
   if (!kIsWeb) {
     await SosNotificationService.init();
+    await OneSignalService.instance.init();
   }
   runApp(const SmartResidenceApp());
 }

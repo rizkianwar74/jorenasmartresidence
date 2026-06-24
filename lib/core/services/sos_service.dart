@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../features/auth/auth_repository.dart';
+import 'onesignal_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Enum
@@ -187,6 +188,15 @@ class SosService {
       };
 
       final ref = await _col.add(data);
+
+      // Kirim push ke satpam bertugas (fire-and-forget; dokumen SOS
+      // sudah tersimpan, jadi kegagalan push tidak memblok alur).
+      OneSignalService.instance.sendSosToOnDutySatpam(
+        isSos: type == SosType.sos,
+        namaWarga: namaWarga,
+        blok: blok,
+        nomorUnit: nomorUnit,
+      );
 
       return SosAlert(
         id: ref.id,

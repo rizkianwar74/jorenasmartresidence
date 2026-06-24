@@ -4,6 +4,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../pembayaran/data/payment_repository.dart';
+import '../../core/services/onesignal_service.dart';
 
 // ── Model hasil login ────────────────────────────────────────────────────────
 class AuthResult {
@@ -119,6 +120,8 @@ class AuthRepository {
             : firebaseUser.photoURL,
       );
 
+      await _syncOneSignal(
+          firebaseUser.uid, role, (data['isOnDuty'] as bool?) ?? false);
       return true;
     } catch (_) {
       // Token expired, akun dihapus, atau tidak ada koneksi — minta login ulang
@@ -128,6 +131,25 @@ class AuthRepository {
 
   // ── Logout — bersihkan in-memory session ──────────────────────────────────
   static void clearUser() => _currentUser = null;
+
+  // ── Sinkronkan identitas & tag ke OneSignal (untuk penargetan notif) ──────
+  // External ID = uid agar device bisa ditarget per-user. Tag `role` & (khusus
+  // satpam) `onDuty` dipakai server/Dashboard untuk mengirim SOS hanya ke
+  // satpam yang sedang bertugas. Dibungkus try/catch supaya kegagalan OneSignal
+  // tidak pernah menggagalkan login.
+  static Future<void> _syncOneSignal(
+      String uid, UserRole role, bool onDuty) async {
+    try {
+      await OneSignalService.instance.login(uid);
+      await OneSignalService.instance.setTag('role', role.name);
+      if (role == UserRole.satpam) {
+        await OneSignalService.instance
+            .setTag('onDuty', onDuty ? 'true' : 'false');
+      }
+    } catch (_) {
+      // abaikan — OneSignal tidak boleh memblok alur auth
+    }
+  }
 
   // ── Ganti password (re-autentikasi + update) ─────────────────────────────
   /// Mengembalikan `null` bila sukses, atau pesan error siap-tampil bila gagal.
@@ -256,6 +278,7 @@ class AuthRepository {
         photoUrl     : photoUrl,
       );
 
+      await _syncOneSignal(user.uid, role, (data?['isOnDuty'] as bool?) ?? false);
       return _currentUser;
     } catch (e) {
       return null;
@@ -360,6 +383,7 @@ class AuthRepository {
   // ── Logout ────────────────────────────────────────────────────────────────
   static Future<void> logout() async {
     await FirebaseAuth.instance.signOut();
+    try { await OneSignalService.instance.logout(); } catch (_) {}
     _currentUser = null;
   }
 }
