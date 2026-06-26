@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/services/onesignal_service.dart';
 import '../../shared/widgets/satpam_bottom_nav.dart';
 import 'data/security_repository.dart';
 
@@ -139,6 +140,13 @@ class _SatpamPatroliPageState extends State<SatpamPatroliPage> {
 
       ScaffoldMessenger.of(context).showSnackBar(
           _snackBar('Patroli dimulai pukul $jamMulai. Tetap waspada!'));
+
+      // Kirim push ke semua warga (fire-and-forget).
+      OneSignalService.instance.sendPatroliUpdate(
+        mulai      : true,
+        blok       : blok,
+        namaSatpam : namaSatpam,
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
@@ -191,6 +199,14 @@ class _SatpamPatroliPageState extends State<SatpamPatroliPage> {
 
       ScaffoldMessenger.of(context).showSnackBar(
           _snackBar('Patroli selesai pukul $jamSelesai. Laporan tersimpan.'));
+
+      // Kirim push ke semua warga (fire-and-forget).
+      final namaSatpam = SecurityRepository.instance.satpamDisplayName;
+      OneSignalService.instance.sendPatroliUpdate(
+        mulai      : false,
+        blok       : _activeBlok.isNotEmpty ? _activeBlok : '-',
+        namaSatpam : namaSatpam,
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);

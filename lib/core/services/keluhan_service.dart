@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import '../../features/auth/auth_repository.dart';
+import 'onesignal_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Enum status
@@ -209,6 +210,14 @@ class KeluhanService {
         createdAt : DateTime.now(),
         fotoUrls  : urls,
       );
+
+      // Notifikasi ke satpam on duty (fire-and-forget).
+      OneSignalService.instance.sendKeluhanBaruToSatpam(
+        namaWarga : namaWarga,
+        judul     : judul,
+        kategori  : kategori,
+      );
+
       return (item, fotoErrors);
     } catch (e) {
       debugPrint('[KeluhanService] sendKeluhan error: $e');

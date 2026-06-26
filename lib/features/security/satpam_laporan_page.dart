@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/services/bantuan_service.dart';
+import '../../core/services/onesignal_service.dart';
 import 'data/security_repository.dart';
 
 class SatpamLaporanPage extends StatefulWidget {
@@ -61,11 +62,18 @@ class _SatpamLaporanPageState extends State<SatpamLaporanPage> {
 
   Future<void> _onMyWay(BantuanRequest req) async {
     HapticFeedback.mediumImpact();
-    final uid = SecurityRepository.instance.currentSatpamUidOrNull;
+    final repo = SecurityRepository.instance;
+    final uid  = repo.currentSatpamUidOrNull;
     await BantuanService.updateStatus(
       requestId: req.id,
       status: BantuanStatus.onMyWay,
       respondedBy: uid,
+    );
+    // Notifikasi ke user yang meminta bantuan (fire-and-forget).
+    OneSignalService.instance.sendBantuanUpdate(
+      userId     : req.uid,
+      onMyWay    : true,
+      namaSatpam : repo.satpamDisplayName,
     );
   }
 
@@ -103,6 +111,12 @@ class _SatpamLaporanPageState extends State<SatpamLaporanPage> {
       await BantuanService.updateStatus(
         requestId: req.id,
         status: BantuanStatus.resolved,
+      );
+      // Notifikasi ke user yang meminta bantuan (fire-and-forget).
+      OneSignalService.instance.sendBantuanUpdate(
+        userId     : req.uid,
+        onMyWay    : false,
+        namaSatpam : SecurityRepository.instance.satpamDisplayName,
       );
     }
   }

@@ -708,12 +708,21 @@ class _BillingContentState extends State<_BillingContent> {
     return years;
   }
 
-  int get _lunas =>
-      _periodeFiltered.where((t) => t.status == StatusTagihan.lunas).length;
+  // Hitung WARGA UNIK (bukan jumlah tagihan) agar warga dengan banyak bulan
+  // tunggakan tidak dihitung berkali-kali.
+  int get _lunas => _periodeFiltered
+      .where((t) => t.status == StatusTagihan.lunas)
+      .map((t) => t.userId)
+      .whereType<String>()
+      .toSet()
+      .length;
   int get _belum => _periodeFiltered
       .where((t) =>
           t.status == StatusTagihan.belumBayar ||
           t.status == StatusTagihan.jatuhTempo)
+      .map((t) => t.userId)
+      .whereType<String>()
+      .toSet()
       .length;
 
   // ── Nominal rupiah untuk summary boxes ──────────────────────────────────────

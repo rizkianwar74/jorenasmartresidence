@@ -448,11 +448,18 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
     HapticFeedback.heavyImpact();
     // Stop dering langsung tanpa tunggu Firestore callback
     _stopRinging();
-    final uid = SecurityRepository.instance.currentSatpamUidOrNull;
+    final repo = SecurityRepository.instance;
+    final uid  = repo.currentSatpamUidOrNull;
     await SosService.updateStatus(
       alertId: alert.id,
       status: SosStatus.onMyWay,
       respondedBy: uid,
+    );
+    // Notifikasi balik ke user pemilik SOS (fire-and-forget).
+    OneSignalService.instance.sendSosUpdate(
+      userId     : alert.userId,
+      onMyWay    : true,
+      namaSatpam : repo.satpamDisplayName,
     );
     // Batalkan notif setelah direspons
     if (alert.type == SosType.sos) {
@@ -467,6 +474,12 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
     await SosService.updateStatus(
       alertId: alert.id,
       status: SosStatus.resolved,
+    );
+    // Notifikasi balik ke user pemilik SOS (fire-and-forget).
+    OneSignalService.instance.sendSosUpdate(
+      userId     : alert.userId,
+      onMyWay    : false,
+      namaSatpam : SecurityRepository.instance.satpamDisplayName,
     );
   }
 

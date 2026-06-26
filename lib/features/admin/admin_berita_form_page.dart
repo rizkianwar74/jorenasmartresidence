@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/services/onesignal_service.dart';
 import 'data/admin_repository.dart';
 import 'models/berita_doc.dart';
 
@@ -138,6 +139,12 @@ class _BeritaFormDialogState extends State<_BeritaFormDialog> {
           'authorUid': repo.currentAdminUid,
           'viewCount': 0,
         });
+        // Notifikasi ke semua warga hanya saat publish (bukan draft).
+        if (!asDraft) {
+          OneSignalService.instance.sendBeritaBaru(
+            judul: _judulCtrl.text.trim(),
+          );
+        }
       }
 
       if (mounted) {

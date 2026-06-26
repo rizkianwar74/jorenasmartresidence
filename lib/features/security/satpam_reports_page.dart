@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/services/keluhan_service.dart';
+import '../../core/services/onesignal_service.dart';
 import '../../shared/widgets/satpam_bottom_nav.dart';
 import 'data/security_repository.dart';
 
@@ -184,6 +185,12 @@ class _KeluhanTabState extends State<_KeluhanTab>
       adminNote   : note,
       assignToUid : repo.currentSatpamUid,
       assignToName: repo.satpamDisplayName,
+    );
+    // Notifikasi ke warga pemilik keluhan (fire-and-forget).
+    OneSignalService.instance.sendKeluhanUpdate(
+      userId       : item.uid,
+      statusLabel  : _labelOf(newStatus),
+      judulKeluhan : item.judul,
     );
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

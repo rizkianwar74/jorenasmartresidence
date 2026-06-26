@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/services/keluhan_service.dart';
+import '../../core/services/onesignal_service.dart';
 import 'widgets/admin_sidebar.dart';
 import 'widgets/admin_top_bar.dart';
 
@@ -602,6 +603,12 @@ class _DetailPanelState extends State<_DetailPanel> {
           satpamUid  : result.uid,
           satpamNama : result.nama,
         );
+        // Notifikasi ke satpam yang ditugaskan (fire-and-forget).
+        OneSignalService.instance.sendKeluhanAssigned(
+          satpamUid : result.uid,
+          namaWarga : item.namaWarga,
+          judul     : item.judul,
+        );
         if (mounted) {
           setState(() => _assigning = false);
           widget.onAssigned();
@@ -620,6 +627,21 @@ class _DetailPanelState extends State<_DetailPanel> {
   Future<void> _updateStatus(KeluhanItem item, StatusKeluhan s) async {
     await KeluhanService.updateStatus(keluhanId: item.id, status: s);
     if (mounted) widget.onAssigned();
+    // Notifikasi ke warga pemilik keluhan (fire-and-forget).
+    OneSignalService.instance.sendKeluhanUpdate(
+      userId       : item.uid,
+      statusLabel  : _statusLabelFor(s),
+      judulKeluhan : item.judul,
+    );
+  }
+
+  String _statusLabelFor(StatusKeluhan s) {
+    switch (s) {
+      case StatusKeluhan.diproses: return 'Sedang Diproses';
+      case StatusKeluhan.selesai:  return 'Selesai';
+      case StatusKeluhan.ditolak:  return 'Ditolak';
+      default:                     return 'Menunggu';
+    }
   }
 
   @override

@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import '../../features/auth/auth_repository.dart';
+import 'onesignal_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Enum
@@ -196,6 +197,14 @@ class BantuanService {
 
       // Simpan ID — home page langsung watch satu dokumen ini
       _activeRequestId = ref.id;
+
+      // Notifikasi ke satpam on duty (fire-and-forget).
+      OneSignalService.instance.sendBantuanBaruToSatpam(
+        namaWarga : namaWarga,
+        blok      : blok,
+        nomorUnit : nomorUnit,
+        kategori  : kategori,
+      );
 
       return BantuanRequest(
         id        : ref.id,
