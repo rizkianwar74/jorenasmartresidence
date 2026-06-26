@@ -81,6 +81,32 @@ class _AdminHomePageState extends State<AdminHomePage> {
   int get _totalMenungguBulanIni =>
       _totalTagihanBulanIni - _totalDibayarBulanIni;
 
+  // Dibayar via QRIS (Pakasir) — metodeBayar mengandung 'qris'
+  int get _dibayarQris => _tagihanBulanIni
+      .where((t) =>
+          t.status == StatusTagihan.lunas &&
+          (t.metodeBayar?.toLowerCase().contains('qris') ?? false))
+      .fold(0, (sum, t) => sum + t.jumlah);
+
+  // Dibayar via Tunai (Manual) — metodeBayar mengandung 'tunai'
+  int get _dibayarTunai => _tagihanBulanIni
+      .where((t) =>
+          t.status == StatusTagihan.lunas &&
+          (t.metodeBayar?.toLowerCase().contains('tunai') ?? false))
+      .fold(0, (sum, t) => sum + t.jumlah);
+
+  // Jumlah transaksi per metode (count tagihan lunas)
+  int get _countQris => _tagihanBulanIni
+      .where((t) =>
+          t.status == StatusTagihan.lunas &&
+          (t.metodeBayar?.toLowerCase().contains('qris') ?? false))
+      .length;
+  int get _countTunai => _tagihanBulanIni
+      .where((t) =>
+          t.status == StatusTagihan.lunas &&
+          (t.metodeBayar?.toLowerCase().contains('tunai') ?? false))
+      .length;
+
   static DateTime get _startOfToday {
     final n = DateTime.now();
     return DateTime(n.year, n.month, n.day);
@@ -235,9 +261,13 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                   Expanded(
                                     flex: 1,
                                     child: _FinancialStatus(
-                                      totalTagihan: _totalTagihanBulanIni,
-                                      totalDibayar: _totalDibayarBulanIni,
-                                      totalMenunggu: _totalMenungguBulanIni,
+                                      totalTagihan  : _totalTagihanBulanIni,
+                                      totalDibayar  : _totalDibayarBulanIni,
+                                      totalMenunggu : _totalMenungguBulanIni,
+                                      dibayarQris   : _dibayarQris,
+                                      dibayarTunai  : _dibayarTunai,
+                                      countQris     : _countQris,
+                                      countTunai    : _countTunai,
                                     ),
                                   ),
                                 ],
@@ -567,18 +597,30 @@ class _FinancialStatus extends StatelessWidget {
     required this.totalTagihan,
     required this.totalDibayar,
     required this.totalMenunggu,
+    required this.dibayarQris,
+    required this.dibayarTunai,
+    required this.countQris,
+    required this.countTunai,
   });
 
   final int totalTagihan;
   final int totalDibayar;
   final int totalMenunggu;
+  final int dibayarQris;
+  final int dibayarTunai;
+  final int countQris;
+  final int countTunai;
 
   double get _persenTertagih =>
       totalTagihan == 0 ? 0 : totalDibayar / totalTagihan;
 
+  double get _persenQris =>
+      totalDibayar == 0 ? 0 : dibayarQris / totalDibayar;
+
   @override
   Widget build(BuildContext context) {
-    final adaTagihan = totalTagihan > 0;
+    final adaTagihan  = totalTagihan > 0;
+    final adaDibayar  = totalDibayar > 0;
     final persenLabel = '${(_persenTertagih * 100).round()}% Tertagih';
 
     return Container(
@@ -613,7 +655,7 @@ class _FinancialStatus extends StatelessWidget {
                   children: [
                     Text(formatRupiah(totalTagihan),
                         style: GoogleFonts.inter(
-                            fontSize: 26,
+                            fontSize: 24,
                             fontWeight: FontWeight.bold,
                             color: AppColors.textDark,
                             height: 1)),
@@ -635,8 +677,9 @@ class _FinancialStatus extends StatelessWidget {
               ],
             ),
 
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
 
+          // Progress bar tertagih
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -677,8 +720,126 @@ class _FinancialStatus extends StatelessWidget {
                       color: const Color(0xFFDC2626))),
             ],
           ),
+
+          // ── Divider + breakdown metode ─────────────────────────────────────
+          if (adaDibayar) ...[
+            const SizedBox(height: 18),
+            Divider(height: 1, color: Colors.grey.shade100),
+            const SizedBox(height: 14),
+
+            Text('Metode Pembayaran',
+                style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textGrey,
+                    letterSpacing: 0.4)),
+            const SizedBox(height: 10),
+
+            // QRIS row
+            _MetodeRow(
+              icon      : Icons.qr_code,
+              label     : 'QRIS (Pakasir)',
+              amount    : dibayarQris,
+              count     : countQris,
+              iconColor : const Color(0xFF1D4ED8),
+              bg        : const Color(0xFFEFF6FF),
+              barColor  : const Color(0xFF3B82F6),
+              barValue  : _persenQris,
+            ),
+            const SizedBox(height: 8),
+
+            // Tunai row
+            _MetodeRow(
+              icon      : Icons.payments_outlined,
+              label     : 'Tunai (Manual)',
+              amount    : dibayarTunai,
+              count     : countTunai,
+              iconColor : const Color(0xFF16A34A),
+              bg        : const Color(0xFFF0FDF4),
+              barColor  : const Color(0xFF22C55E),
+              barValue  : totalDibayar == 0
+                  ? 0
+                  : dibayarTunai / totalDibayar,
+            ),
+          ],
         ],
       ),
+    );
+  }
+}
+
+// ── Baris metode pembayaran di Financial Status ───────────────────────────────
+class _MetodeRow extends StatelessWidget {
+  const _MetodeRow({
+    required this.icon,
+    required this.label,
+    required this.amount,
+    required this.count,
+    required this.iconColor,
+    required this.bg,
+    required this.barColor,
+    required this.barValue,
+  });
+
+  final IconData icon;
+  final String   label;
+  final int      amount;
+  final int      count;
+  final Color    iconColor;
+  final Color    bg;
+  final Color    barColor;
+  final double   barValue;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(5),
+              decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(6)),
+              child: Icon(icon, size: 12, color: iconColor),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(label,
+                  style: GoogleFonts.inter(
+                      fontSize: 11, color: AppColors.textGrey)),
+            ),
+            Text(
+              amount > 0 ? formatRupiah(amount) : '-',
+              style: GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: amount > 0 ? AppColors.textDark : AppColors.textGrey),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(3),
+                child: LinearProgressIndicator(
+                  value: barValue,
+                  backgroundColor: Colors.grey.shade100,
+                  valueColor: AlwaysStoppedAnimation<Color>(barColor),
+                  minHeight: 4,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '$count txn',
+              style: GoogleFonts.inter(
+                  fontSize: 10, color: AppColors.textGrey),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

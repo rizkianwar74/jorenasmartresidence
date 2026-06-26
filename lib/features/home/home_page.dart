@@ -58,23 +58,24 @@ class _HomePageState extends State<HomePage> {
     _ensureTagihanBulanIni();
   }
 
-  /// Auto-generate tagihan bulan ini (sekali per bulan per user) saat home
-  /// dibuka — aman dipanggil berulang, skip kalau sudah ada. Tagihan bulan
-  /// lalu yang belum lunas tidak diubah; tetap jadi tunggakan terpisah.
+  /// Auto-generate tagihan bulan ini + isi gap bulan yang terlewat.
+  ///
+  /// Dipanggil setiap kali HomePage dibuka — aman dipanggil berulang karena
+  /// hanya membuat dokumen yang belum ada.
   Future<void> _ensureTagihanBulanIni() async {
-    final uid = AuthRepository.currentUid;
+    final uid  = AuthRepository.currentUid;
     final user = AuthRepository.currentUser;
     if (uid == null || user == null) return;
     try {
-      await PaymentRepository.ensureCurrentMonthTagihan(
-        userId: uid,
+      await PaymentRepository.ensureAllMissingTagihan(
+        userId     : uid,
         namaResiden: user.namaLengkap,
-        nomorHp: user.nomorHp,
-        blok: user.blok,
-        nomorUnit: user.nomorUnit,
+        nomorHp    : user.nomorHp,
+        blok       : user.blok,
+        nomorUnit  : user.nomorUnit,
       );
     } catch (e) {
-      debugPrint('[HomeTagihan] gagal ensure tagihan bulan ini: $e');
+      debugPrint('[HomeTagihan] gagal ensure tagihan: $e');
     }
   }
 

@@ -207,6 +207,139 @@ class PaymentRepository {
     );
   }
 
+  /// Isi semua bulan yang terlewat dari bulan registrasi user sampai bulan ini.
+  ///
+  /// Dipanggil saat user buka HomePage — aman dipanggil berulang karena
+  /// hanya membuat dokumen yang belum ada (menggunakan batch set dengan
+  /// id deterministik `tagihan-{tahun}-{bulan}-{userId}`).
+  ///
+  /// Cara kerja:
+  ///   1. Ambil `createdAt` dari dokumen `users/{userId}` di Firestore.
+  ///   2. Ambil semua periodeKey tagihan yang sudah ada milik user.
+  ///   3. Iterasi dari bulan registrasi → bulan berjalan.
+  ///   4. Buat batch write untuk setiap bulan yang belum ada.
+  static Future<void> ensureAllMissingTagihan({
+    required String userId,
+    required String namaResiden,
+    required String nomorHp,
+    required String blok,
+    required String nomorUnit,
+    int jumlah = iuranBulanan,
+  }) async {
+    // 1. Ambil bulan mulai dari createdAt user (fallback: bulan ini).
+    final now = DateTime.now();
+    DateTime startDate = DateTime(now.year, now.month);
+
+    try {
+      final userDoc = await _db.collection('users').doc(userId).get();
+      final ts = userDoc.data()?['createdAt'];
+      if (ts is Timestamp) {
+        final d = ts.toDate();
+        startDate = DateTime(d.year, d.month);
+      }
+    } catch (_) {}
+
+    // 2. Ambil periodeKey semua tagihan yang sudah ada (hanya bulan ≤ sekarang).
+    final currentKey = now.year * 100 + now.month;
+    final snap = await _db
+        .collection(_collection)
+        .where('userId', isEqualTo: userId)
+        .get();
+
+    final existingKeys = <int>{};
+    for (final doc in snap.docs) {
+      final data = doc.data();
+      final bulanIndex = (data['bulanIndex'] as int?) ?? 0;
+      final tahun      = (data['tahun']      as int?) ?? 0;
+      if (bulanIndex > 0 && tahun > 0) {
+        existingKeys.add(tahun * 100 + bulanIndex);
+      }
+    }
+
+    // 3. Iterasi bulan dari startDate sampai bulan ini, kumpulkan yang hilang.
+    final batch = _db.batch();
+    int count = 0;
+    int year  = startDate.year;
+    int month = startDate.month;
+
+    while (true) {
+      final key = year * 100 + month;
+      if (key > currentKey) break;
+
+      if (!existingKeys.contains(key)) {
+        final id         = 'tagihan-$year-${month.toString().padLeft(2, '0')}-$userId';
+        final bulan      = bulanPanjangList[month - 1];
+        final lastDay    = DateTime(year, month + 1, 0).day;
+        final jatuhTempo = '$lastDay ${bulanSingkatList[month - 1]} $year';
+
+        batch.set(_db.collection(_collection).doc(id), {
+          'userId'     : userId,
+          'namaResiden': namaResiden,
+          'nomorHp'    : nomorHp,
+          'blok'       : blok,
+          'nomorUnit'  : nomorUnit,
+          'bulan'      : bulan,
+          'bulanIndex' : month,
+          'tahun'      : year,
+          'jumlah'     : jumlah,
+          'jatuhTempo' : jatuhTempo,
+          'status'     : statusTagihanToString(StatusTagihan.belumBayar),
+          'tanggalBayar': null,
+          'metodeBayar' : null,
+          'orderId'     : null,
+          'createdAt'   : FieldValue.serverTimestamp(),
+        });
+        count++;
+      }
+
+      // Maju satu bulan.
+      month++;
+      if (month > 12) { month = 1; year++; }
+    }
+
+    if (count > 0) await batch.commit();
+  }
+
+  /// Buat tagihan untuk bulan/tahun tertentu — dipakai admin untuk tagihan
+  /// di muka (warga bayar tunai di tempat, minta dibuatkan tagihan bulan depan).
+  ///
+  /// Return `true` kalau berhasil dibuat, `false` kalau sudah ada (idempotent).
+  static Future<bool> createTagihanForMonth({
+    required String userId,
+    required String namaResiden,
+    required String nomorHp,
+    required String blok,
+    required String nomorUnit,
+    required int bulanIndex, // 1-12
+    required int tahun,
+    int jumlah = iuranBulanan,
+  }) async {
+    final id =
+        'tagihan-$tahun-${bulanIndex.toString().padLeft(2, '0')}-$userId';
+    final existing = await _db.collection(_collection).doc(id).get();
+    if (existing.exists) return false;
+
+    final bulan     = bulanPanjangList[bulanIndex - 1];
+    final lastDay   = DateTime(tahun, bulanIndex + 1, 0).day;
+    final jatuhTempo =
+        '$lastDay ${bulanSingkatList[bulanIndex - 1]} $tahun';
+
+    await createTagihan(
+      id          : id,
+      userId      : userId,
+      namaResiden : namaResiden,
+      nomorHp     : nomorHp,
+      blok        : blok,
+      nomorUnit   : nomorUnit,
+      bulan       : bulan,
+      bulanIndex  : bulanIndex,
+      tahun       : tahun,
+      jumlah      : jumlah,
+      jatuhTempo  : jatuhTempo,
+    );
+    return true;
+  }
+
   /// Migrasi satu kali: update jumlah SEMUA tagihan yang BELUM lunas
   /// (belumBayar/jatuhTempo/pending) ke nilai iuran terbaru. Tagihan yang
   /// sudah lunas (riwayat) TIDAK diubah supaya histori pembayaran tetap

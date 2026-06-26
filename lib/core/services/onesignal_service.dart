@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
+import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode, debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
@@ -31,8 +31,9 @@ class OneSignalService {
     if (kIsWeb || _initialized) return;
     _initialized = true;
 
-    // Log verbose untuk debugging — turunkan/hapus saat produksi.
-    OneSignal.Debug.setLogLevel(OSLogLevel.verbose);
+    // Log verbose hanya di debug build — silent di produksi.
+    OneSignal.Debug.setLogLevel(
+        kDebugMode ? OSLogLevel.verbose : OSLogLevel.none);
     OneSignal.initialize(appId);
 
     _setupPushSubscriptionObserver();
@@ -91,47 +92,56 @@ class OneSignalService {
     return OneSignal.Notifications.requestPermission(true);
   }
 
-  // ── Observer + Welcome Dialog (wajib menurut panduan OneSignal) ──────────
+  // ── Observer push subscription ────────────────────────────────────────────
   void _setupPushSubscriptionObserver() {
     OneSignal.User.pushSubscription.addObserver((state) {
-      final previousId = state.previous.id;
-      final currentId = state.current.id;
-      // Saat ID berubah dari kosong → terisi, device baru terdaftar.
       debugPrint('[OneSignal] pushSubscription berubah: '
-          'previous=$previousId current=$currentId');
-      if ((previousId == null || previousId.isEmpty) &&
-          (currentId != null && currentId.isNotEmpty)) {
-        _showWelcomeDialog();
-      }
+          'previous=${state.previous.id} current=${state.current.id}');
     });
   }
 
-  void _showWelcomeDialog() {
-    final ctx = navigatorKey.currentContext;
-    if (ctx == null) return;
-    showDialog<void>(
-      context: ctx,
-      barrierDismissible: false,
-      builder: (_) => AlertDialog(
-        title: const Text('Your OneSignal integration is complete!'),
-        content: const Text(
-          'Click the button below to trigger your first journey via an '
-          'in-app message.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              OneSignal.InAppMessages.addTrigger(
-                'ai_implementation_campaign_email_journey',
-                'true',
-              );
-            },
-            child: const Text('Trigger your first journey'),
-          ),
-        ],
-      ),
-    );
+  // ── Kirim push pembayaran berhasil ke user ────────────────────────────────
+  /// Notifikasi ke pemilik tagihan (targeted by External ID = Firebase UID).
+  Future<void> sendPaymentSuccess({
+    required String userId,
+    required String periode,
+    required String jumlah,
+  }) async {
+    if (kIsWeb) return;
+    final restKey = dotenv.maybeGet('ONESIGNAL_REST_API_KEY') ?? '';
+    if (restKey.isEmpty) {
+      debugPrint(
+          '[OneSignal] ONESIGNAL_REST_API_KEY kosong — push payment dilewati');
+      return;
+    }
+    try {
+      final payload = {
+        'app_id'   : appId,
+        'headings' : {'en': '✅ Pembayaran Berhasil!', 'id': '✅ Pembayaran Berhasil!'},
+        'contents' : {
+          'en': 'Iuran $periode sebesar $jumlah telah dikonfirmasi.',
+          'id': 'Iuran $periode sebesar $jumlah telah dikonfirmasi.',
+        },
+        // Targetkan device berdasarkan External ID (Firebase UID).
+        'include_aliases' : {'external_id': [userId]},
+        'target_channel'  : 'push',
+      };
+      final res = await http.post(
+        Uri.parse('https://api.onesignal.com/notifications'),
+        headers: {
+          'Content-Type' : 'application/json; charset=UTF-8',
+          'Accept'       : 'application/json',
+          'Authorization': 'Basic $restKey',
+        },
+        body: jsonEncode(payload),
+      );
+      if (res.statusCode != 200 && res.statusCode != 201) {
+        debugPrint(
+            '[OneSignal] sendPaymentSuccess gagal ${res.statusCode}: ${res.body}');
+      }
+    } catch (e) {
+      debugPrint('[OneSignal] sendPaymentSuccess error: $e');
+    }
   }
 
   // ── Kirim push SOS/Panggilan ke satpam yang sedang BERTUGAS ───────────────
