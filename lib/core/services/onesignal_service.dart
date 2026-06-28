@@ -216,10 +216,11 @@ class OneSignalService {
     }
     try {
       final payload = {
-        'app_id'   : appId,
-        'headings' : {'en': title, 'id': title},
-        'contents' : {'en': body,  'id': body},
-        'filters'  : [
+        'app_id'        : appId,
+        'headings'      : {'en': title, 'id': title},
+        'contents'      : {'en': body,  'id': body},
+        'target_channel': 'push',
+        'filters'       : [
           {'field': 'tag', 'key': 'role', 'relation': '=', 'value': 'user'},
         ],
       };
@@ -412,10 +413,11 @@ class OneSignalService {
     }
     try {
       final payload = {
-        'app_id': appId,
-        'headings': {'en': title},
-        'contents': {'en': message},
-        'priority': 10,
+        'app_id'        : appId,
+        'headings'      : {'en': title,   'id': title},
+        'contents'      : {'en': message, 'id': message},
+        'priority'      : 10,
+        'target_channel': 'push',
         // Hanya kirim ke satpam yang sedang bertugas.
         'filters': [
           {'field': 'tag', 'key': 'role', 'relation': '=', 'value': 'satpam'},
