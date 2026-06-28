@@ -131,7 +131,7 @@ class OneSignalService {
         headers: {
           'Content-Type' : 'application/json; charset=UTF-8',
           'Accept'       : 'application/json',
-          'Authorization': 'Basic $restKey',
+          'Authorization': 'Key $restKey',
         },
         body: jsonEncode(payload),
       );
@@ -220,7 +220,7 @@ class OneSignalService {
         'headings' : {'en': title, 'id': title},
         'contents' : {'en': body,  'id': body},
         'filters'  : [
-          {'field': 'tag', 'key': 'role', 'relation': '=', 'value': 'warga'},
+          {'field': 'tag', 'key': 'role', 'relation': '=', 'value': 'user'},
         ],
       };
       final res = await http.post(
@@ -428,9 +428,7 @@ class OneSignalService {
         headers: {
           'Content-Type': 'application/json; charset=UTF-8',
           'Accept': 'application/json',
-          // REST API Key klasik memakai skema 'Basic'. Jika kamu memakai key
-          // gaya baru OneSignal, ganti 'Basic' menjadi 'Key'.
-          'Authorization': 'Basic $restKey',
+          'Authorization': 'Key $restKey',
         },
         body: jsonEncode(payload),
       );

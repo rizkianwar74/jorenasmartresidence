@@ -31,8 +31,12 @@ class _TagihanPageState extends State<TagihanPage> {
   // Mengembalikan [count] bulan advance mulai dari bulan setelah bulan berjalan.
   // Bulan yang sudah ada di [existingAdvance] dipakai apa adanya;
   // sisanya dibuat sebagai TagihanModel virtual (belum ada di Firestore).
+  /// Bangun daftar [count] bulan advance yang BELUM lunas.
+  ///
+  /// [allAdvance] berisi SEMUA tagihan masa depan (termasuk yang sudah lunas)
+  /// sehingga bulan yang telah dibayar di-skip dan diganti bulan berikutnya.
   List<TagihanModel> _buildAdvanceList({
-    required List<TagihanModel> existingAdvance,
+    required List<TagihanModel> allAdvance,
     required TagihanModel userRef,
     required int count,
   }) {
@@ -40,27 +44,34 @@ class _TagihanPageState extends State<TagihanPage> {
     final result = <TagihanModel>[];
     final now    = DateTime.now();
     int key      = now.year * 100 + now.month;
+    // Safety limit: maks iterasi = count + 120 bulan (10 tahun) ke depan.
+    int limit    = count + 120;
 
-    for (int i = 0; i < count; i++) {
+    while (result.length < count && limit-- > 0) {
       // Maju satu bulan.
       int year  = key ~/ 100;
       int month = key % 100 + 1;
       if (month > 12) { month = 1; year++; }
       key = year * 100 + month;
 
-      // Pakai dokumen Firestore yang sudah ada kalau tersedia.
+      // Cek apakah bulan ini sudah ada di Firestore.
       TagihanModel? existing;
-      for (final t in existingAdvance) {
+      for (final t in allAdvance) {
         if (t.periodeKey == key) { existing = t; break; }
       }
+
+      // Bulan ini sudah lunas → lewati, ambil bulan berikutnya.
+      if (existing != null && existing.status == StatusTagihan.lunas) continue;
+
+      // Bulan ini ada tapi belum lunas → pakai dokumen Firestore.
       if (existing != null) {
         result.add(existing);
         continue;
       }
 
-      // Buat virtual tagihan untuk bulan ini.
-      final id       = 'tagihan-$year-${month.toString().padLeft(2, '0')}-${userRef.userId}';
-      final lastDay  = DateTime(year, month + 1, 0).day;
+      // Bulan ini belum ada → buat virtual tagihan.
+      final id         = 'tagihan-$year-${month.toString().padLeft(2, '0')}-${userRef.userId}';
+      final lastDay    = DateTime(year, month + 1, 0).day;
       final jatuhTempo = '$lastDay ${bulanSingkatList[month - 1]} $year';
       result.add(TagihanModel(
         id         : id,
@@ -88,7 +99,9 @@ class _TagihanPageState extends State<TagihanPage> {
     setState(() => _isPreparingPayment = true);
     try {
       final existingIds = allExisting.map((t) => t.id).toSet();
-      final toCreate = selectedTagihan.where((t) => !existingIds.contains(t.id));
+      final toCreate = selectedTagihan
+          .where((t) => !existingIds.contains(t.id))
+          .toList();
 
       for (final t in toCreate) {
         await PaymentRepository.createTagihanForMonth(
@@ -107,6 +120,14 @@ class _TagihanPageState extends State<TagihanPage> {
         context,
         MaterialPageRoute(
           builder: (_) => PakasirPaymentPage(tagihanList: selectedTagihan),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal menyiapkan pembayaran: $e'),
+          backgroundColor: Colors.red.shade600,
         ),
       );
     } finally {
@@ -173,23 +194,25 @@ class _TagihanPageState extends State<TagihanPage> {
     //   advance = bulan-bulan dimuka (> hari ini) → opsional, dikontrol stepper
     final now        = DateTime.now();
     final currentKey = now.year * 100 + now.month;
-    final wajib           = aktif.where((t) => t.periodeKey <= currentKey).toList();
-    final advanceExisting = aktif.where((t) => t.periodeKey >  currentKey).toList();
+    final wajib              = aktif.where((t) => t.periodeKey <= currentKey).toList();
+    // Semua tagihan masa depan — termasuk yang sudah lunas — agar _buildAdvanceList
+    // bisa melewati bulan yang sudah dibayar dan memilih bulan berikutnya.
+    final allAdvanceTagihan  = list.where((t) => t.periodeKey > currentKey).toList();
 
-    // Jika semua wajib sudah lunas (wajib kosong) tapi advance ada,
-    // pastikan minimal 1 advance dipilih supaya tombol Bayar tetap aktif.
+    // Jika semua wajib sudah lunas (wajib kosong), minimal 1 advance agar
+    // tombol Bayar tetap aktif untuk pembayaran di muka.
     final minAdv         = wajib.isEmpty ? 1 : 0;
     final effectiveAdvCount =
         _selectedAdvanceCount.clamp(minAdv, _maxAdvanceMonths);
 
-    // Bangun daftar advance (Firestore yang sudah ada + virtual untuk bulan baru).
+    // Bangun daftar advance (skip bulan yang sudah lunas, ambil bulan berikutnya).
     final fullAdvance = list.isNotEmpty
         ? _buildAdvanceList(
-            existingAdvance: advanceExisting,
-            userRef        : list.first,
-            count          : effectiveAdvCount,
+            allAdvance: allAdvanceTagihan,
+            userRef   : list.first,
+            count     : effectiveAdvCount,
           )
-        : advanceExisting.take(effectiveAdvCount).toList();
+        : <TagihanModel>[];
 
     final selectedTagihan = [...wajib, ...fullAdvance];
 

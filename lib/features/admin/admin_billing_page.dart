@@ -184,143 +184,264 @@ class _AdminBillingPageState extends State<AdminBillingPage> {
   }
 
   /// Bottom sheet untuk ubah status tagihan secara manual.
+  /// Menggunakan StatefulBuilder agar loading spinner bisa ditampilkan
+  /// di dalam sheet tanpa menutupnya lebih dulu.
   void _showEditStatusDialog(TagihanModel t) {
     final isLunas = t.status == StatusTagihan.lunas;
+    bool loading   = false;
+
     showModalBottomSheet(
       context: context,
+      isDismissible : false,   // cegah dismiss saat loading
+      enableDrag    : false,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (_) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Ubah Status Pembayaran',
-                style: GoogleFonts.inter(
-                    fontSize: 16, fontWeight: FontWeight.bold,
-                    color: AppColors.textDark),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${t.namaResiden} · ${t.periodeLabel}',
-                style: GoogleFonts.inter(
-                    fontSize: 13, color: AppColors.textGrey),
-              ),
-              const SizedBox(height: 6),
-              // Status saat ini
-              Row(
-                children: [
-                  Text('Status saat ini: ',
-                      style: GoogleFonts.inter(
-                          fontSize: 12, color: AppColors.textGrey)),
-                  _StatusBadge(status: t.status),
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (sheetCtx, setSheet) {
+
+          // ── Aksi: tandai 1 bulan lunas ────────────────────────────────────
+          Future<void> bayarSatuBulan() async {
+            setSheet(() => loading = true);
+            try {
+              await PaymentRepository.setStatusManual(
+                  tagihanId: t.id, status: StatusTagihan.lunas);
+              if (sheetCtx.mounted) Navigator.pop(sheetCtx);
+              if (mounted) _toast('${t.namaResiden} – ${t.periodeLabel} ditandai Lunas.');
+            } catch (e) {
+              setSheet(() => loading = false);
+              if (mounted) _toast('Gagal mengubah status: $e');
+            }
+          }
+
+          // ── Aksi: tandai semua tunggakan lunas (dengan konfirmasi) ────────
+          Future<void> bayarSemuaBulan() async {
+            setSheet(() => loading = true);
+            try {
+              // Query Firestore langsung — tidak bergantung snapshot cache.
+              final tunggakan =
+                  await PaymentRepository.getWajibUnpaid(t.userId ?? '');
+              setSheet(() => loading = false);
+
+              if (tunggakan.isEmpty) {
+                if (sheetCtx.mounted) Navigator.pop(sheetCtx);
+                if (mounted) _toast('Tidak ada tunggakan untuk ${t.namaResiden}.');
+                return;
+              }
+
+              // Tampilkan konfirmasi dengan preview daftar bulan.
+              final periodeList = tunggakan.map((x) => x.periodeLabel).join(' · ');
+              final confirm = await showDialog<bool>(
+                context: sheetCtx,
+                builder: (dCtx) => AlertDialog(
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16)),
+                  title: Text('Konfirmasi Pelunasan',
+                      style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Tandai ${tunggakan.length} bulan sebagai lunas?',
+                        style: GoogleFonts.inter(fontSize: 13),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          periodeList,
+                          style: GoogleFonts.inter(
+                              fontSize: 12, color: AppColors.textGrey),
+                        ),
+                      ),
+                    ],
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(dCtx, false),
+                      child: Text('Batal',
+                          style: GoogleFonts.inter(
+                              color: AppColors.textGrey)),
+                    ),
+                    ElevatedButton(
+                      onPressed: () => Navigator.pop(dCtx, true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green.shade600,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                      ),
+                      child: Text('Ya, Lunaskan',
+                          style: GoogleFonts.inter(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600)),
+                    ),
+                  ],
+                ),
+              );
+
+              if (confirm != true) return;
+
+              setSheet(() => loading = true);
+              await PaymentRepository.markManyAsLunas(
+                tagihanIds : tunggakan.map((x) => x.id).toList(),
+                metodeBayar: 'Tunai (Manual)',
+              );
+              if (sheetCtx.mounted) Navigator.pop(sheetCtx);
+              if (mounted) {
+                _toast('${tunggakan.length} tagihan ${t.namaResiden} ditandai lunas.');
+              }
+            } catch (e) {
+              setSheet(() => loading = false);
+              if (mounted) _toast('Gagal mengubah status: $e');
+            }
+          }
+
+          // ── Aksi: hapus dokumen tagihan ───────────────────────────────────
+          Future<void> hapusTagihan() async {
+            // Konfirmasi sebelum hapus permanen.
+            final confirm = await showDialog<bool>(
+              context: sheetCtx,
+              builder: (dCtx) => AlertDialog(
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
+                title: Text('Hapus Tagihan?',
+                    style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+                content: Text(
+                  'Dokumen tagihan ${t.periodeLabel} milik ${t.namaResiden} '
+                  'akan dihapus permanen dari database. Tindakan ini tidak '
+                  'dapat dibatalkan.',
+                  style: GoogleFonts.inter(fontSize: 13),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dCtx, false),
+                    child: Text('Batal',
+                        style: GoogleFonts.inter(
+                            color: AppColors.textGrey)),
+                  ),
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(dCtx, true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade600,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                    ),
+                    child: Text('Hapus',
+                        style: GoogleFonts.inter(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600)),
+                  ),
                 ],
               ),
-              const SizedBox(height: 20),
-              // Pilihan aksi
-              if (!isLunas) ...[
-                _EditStatusTile(
-                  icon: Icons.person_outline,
-                  iconColor: Colors.green.shade600,
-                  bgColor: Colors.green.shade50,
-                  title: 'Bayar Tunai 1 Bulan',
-                  subtitle: 'Tandai ${t.periodeLabel} sebagai lunas',
-                  onTap: () async {
-                    Navigator.pop(context);
-                    await _applyStatusManual(t, StatusTagihan.lunas);
-                  },
-                ),
-                const SizedBox(height: 8),
-                _EditStatusTile(
-                  icon: Icons.checklist_rounded,
-                  iconColor: Colors.green.shade800,
-                  bgColor: Colors.green.shade50,
-                  title: 'Bayar Tunai Beberapa Bulan',
-                  subtitle: 'Tandai semua tunggakan ${t.namaResiden} sebagai lunas',
-                  onTap: () async {
-                    Navigator.pop(context);
-                    await _applySemuaTunggakanLunas(t);
-                  },
-                ),
-              ],
-              if (isLunas)
-                _EditStatusTile(
-                  icon: Icons.undo_rounded,
-                  iconColor: Colors.red.shade600,
-                  bgColor: Colors.red.shade50,
-                  title: 'Tandai Belum Bayar',
-                  subtitle: 'Batalkan status lunas (hapus catatan bayar)',
-                  onTap: () async {
-                    Navigator.pop(context);
-                    await _applyStatusManual(t, StatusTagihan.belumBayar);
-                  },
-                ),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: Text('Batal',
-                      style: GoogleFonts.inter(
-                          color: AppColors.textGrey,
-                          fontWeight: FontWeight.w600)),
-                ),
+            );
+
+            if (confirm != true) return;
+
+            setSheet(() => loading = true);
+            try {
+              await PaymentRepository.deleteTagihan(t.id);
+              if (sheetCtx.mounted) Navigator.pop(sheetCtx);
+              if (mounted) _toast('Tagihan ${t.periodeLabel} ${t.namaResiden} dihapus.');
+            } catch (e) {
+              setSheet(() => loading = false);
+              if (mounted) _toast('Gagal menghapus tagihan: $e');
+            }
+          }
+
+          // ── UI ────────────────────────────────────────────────────────────
+          return PopScope(
+            canPop: !loading,
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+                child: loading
+                    ? const SizedBox(
+                        height: 120,
+                        child: Center(
+                          child: CircularProgressIndicator(
+                              color: AppColors.primary),
+                        ),
+                      )
+                    : Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Ubah Status Pembayaran',
+                            style: GoogleFonts.inter(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textDark),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${t.namaResiden} · ${t.periodeLabel}',
+                            style: GoogleFonts.inter(
+                                fontSize: 13, color: AppColors.textGrey),
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              Text('Status saat ini: ',
+                                  style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      color: AppColors.textGrey)),
+                              _StatusBadge(status: t.status),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+                          if (!isLunas) ...[
+                            _EditStatusTile(
+                              icon      : Icons.payments_outlined,
+                              iconColor : Colors.green.shade600,
+                              bgColor   : Colors.green.shade50,
+                              title     : 'Bayar Tunai 1 Bulan',
+                              subtitle  : 'Tandai ${t.periodeLabel} sebagai lunas',
+                              onTap     : bayarSatuBulan,
+                            ),
+                            const SizedBox(height: 8),
+                            _EditStatusTile(
+                              icon      : Icons.checklist_rounded,
+                              iconColor : Colors.green.shade800,
+                              bgColor   : Colors.green.shade50,
+                              title     : 'Bayar Tunai Beberapa Bulan',
+                              subtitle  : 'Cek & lunasi semua tunggakan ${t.namaResiden}',
+                              onTap     : bayarSemuaBulan,
+                            ),
+                          ],
+                          if (isLunas)
+                            _EditStatusTile(
+                              icon      : Icons.delete_outline_rounded,
+                              iconColor : Colors.red.shade600,
+                              bgColor   : Colors.red.shade50,
+                              title     : 'Hapus Tagihan',
+                              subtitle  : 'Hapus dokumen tagihan ini secara permanen',
+                              onTap     : hapusTagihan,
+                            ),
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            width: double.infinity,
+                            child: TextButton(
+                              onPressed: () => Navigator.pop(sheetCtx),
+                              child: Text('Batal',
+                                  style: GoogleFonts.inter(
+                                      color: AppColors.textGrey,
+                                      fontWeight: FontWeight.w600)),
+                            ),
+                          ),
+                        ],
+                      ),
               ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
-  }
-
-  Future<void> _applyStatusManual(
-      TagihanModel t, StatusTagihan newStatus) async {
-    try {
-      await PaymentRepository.setStatusManual(
-          tagihanId: t.id, status: newStatus);
-      if (!mounted) return;
-      final label =
-          newStatus == StatusTagihan.lunas ? 'Lunas' : 'Belum Bayar';
-      _toast('${t.namaResiden} ditandai $label.');
-    } catch (e) {
-      if (!mounted) return;
-      _toast('Gagal mengubah status: $e');
-    }
-  }
-
-  /// Tandai SEMUA tagihan belum bayar milik user ini sebagai lunas sekaligus.
-  Future<void> _applySemuaTunggakanLunas(TagihanModel t) async {
-    final now = DateTime.now();
-    final currentKey = now.year * 100 + now.month;
-
-    // Kumpulkan semua tagihan wajib (periodeKey ≤ sekarang) yang belum lunas.
-    final tunggakan = _allTagihan
-        .where((x) =>
-            x.userId == t.userId &&
-            x.periodeKey <= currentKey &&
-            x.status != StatusTagihan.lunas)
-        .toList();
-
-    if (tunggakan.isEmpty) {
-      _toast('Tidak ada tunggakan untuk ${t.namaResiden}.');
-      return;
-    }
-
-    try {
-      await PaymentRepository.markManyAsLunas(
-        tagihanIds : tunggakan.map((x) => x.id).toList(),
-        metodeBayar: 'Tunai (Manual)',
-      );
-      if (!mounted) return;
-      _toast('${tunggakan.length} tagihan ${t.namaResiden} ditandai lunas.');
-    } catch (e) {
-      if (!mounted) return;
-      _toast('Gagal mengubah status: $e');
-    }
   }
 
   /// Navigasi ke halaman detail pembayaran penghuni.

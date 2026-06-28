@@ -300,6 +300,26 @@ class PaymentRepository {
     if (count > 0) await batch.commit();
   }
 
+  /// Ambil semua tagihan wajib (periodeKey ≤ bulan ini) yang BELUM lunas
+  /// milik satu user — langsung query Firestore (bukan dari snapshot cache).
+  /// Hasil diurutkan dari periode terlama ke terbaru.
+  static Future<List<TagihanModel>> getWajibUnpaid(String userId) async {
+    final now        = DateTime.now();
+    final currentKey = now.year * 100 + now.month;
+    final snap = await _db
+        .collection(_collection)
+        .where('userId', isEqualTo: userId)
+        .get();
+    final result = snap.docs
+        .map((d) => TagihanModel.fromMap(d.id, d.data()))
+        .where((t) =>
+            t.periodeKey <= currentKey &&
+            t.status != StatusTagihan.lunas)
+        .toList()
+      ..sort((a, b) => a.periodeKey.compareTo(b.periodeKey));
+    return result;
+  }
+
   /// Buat tagihan untuk bulan/tahun tertentu — dipakai admin untuk tagihan
   /// di muka (warga bayar tunai di tempat, minta dibuatkan tagihan bulan depan).
   ///
@@ -361,6 +381,12 @@ class PaymentRepository {
     }
     await batch.commit();
     return snap.docs.length;
+  }
+
+  /// Hapus dokumen tagihan secara permanen — dipakai admin saat membatalkan
+  /// tagihan yang sudah lunas (mis. salah catat) dan ingin dihapus total.
+  static Future<void> deleteTagihan(String tagihanId) async {
+    await _db.collection(_collection).doc(tagihanId).delete();
   }
 
   /// Format tanggal hari ini (dd MMM yyyy) untuk tanggalBayar.
