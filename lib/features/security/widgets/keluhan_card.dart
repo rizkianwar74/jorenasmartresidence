@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/services/keluhan_service.dart';
+import '../../../core/data/keluhan_repository.dart';
 import '../helpers/status_keluhan_helpers.dart';
 import 'keluhan_detail_sheet.dart';
 

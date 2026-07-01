@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/services/sos_service.dart';
+import '../../../core/data/sos_repository.dart';
 import '../sos_status_page.dart';
 import 'bantuan_form_page.dart';
 
@@ -75,8 +75,8 @@ class BantuanSatpamPage extends StatelessWidget {
               // Cek satpam bertugas & kirim panggilan sekaligus (paralel)
               // supaya pengecekan ini tidak menambah delay.
               final results = await Future.wait([
-                SosService.hasSatpamOnDuty(),
-                SosService.sendCall(),
+                SosRepository.hasSatpamOnDuty(),
+                SosRepository.sendCall(),
               ]);
               final hasOnDuty = results[0] as bool;
               final alert = results[1] as SosAlert?;

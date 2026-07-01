@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/services/bantuan_service.dart';
+import '../../core/data/bantuan_repository.dart';
 
 class BantuanStatusPage extends StatefulWidget {
   const BantuanStatusPage({super.key, required this.requestId});
@@ -30,7 +30,7 @@ class _BantuanStatusPageState extends State<BantuanStatusPage>
       duration: const Duration(milliseconds: 900),
     )..repeat(reverse: true);
 
-    _sub = BantuanService.watchRequest(widget.requestId).listen((req) {
+    _sub = BantuanRepository.watchRequest(widget.requestId).listen((req) {
       if (!mounted) return;
       setState(() => _request = req);
 
@@ -85,7 +85,7 @@ class _BantuanStatusPageState extends State<BantuanStatusPage>
 
     if (confirm != true) return;
     setState(() => _isCancelling = true);
-    await BantuanService.cancelRequest(widget.requestId);
+    await BantuanRepository.cancelRequest(widget.requestId);
     if (mounted) Navigator.pop(context);
   }
 

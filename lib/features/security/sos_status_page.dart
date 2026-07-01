@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/services/sos_service.dart';
+import '../../core/data/sos_repository.dart';
 
 class SosStatusPage extends StatefulWidget {
   const SosStatusPage({super.key, required this.alertId, required this.type});
@@ -32,7 +32,7 @@ class _SosStatusPageState extends State<SosStatusPage>
       duration: const Duration(milliseconds: 900),
     )..repeat(reverse: true);
 
-    _sub = SosService.watchAlert(widget.alertId).listen((alert) {
+    _sub = SosRepository.watchAlert(widget.alertId).listen((alert) {
       if (!mounted) return;
       setState(() => _alert = alert);
 
@@ -89,7 +89,7 @@ class _SosStatusPageState extends State<SosStatusPage>
     if (confirm != true) return;
 
     setState(() => _isCancelling = true);
-    await SosService.cancelAlert(widget.alertId);
+    await SosRepository.cancelAlert(widget.alertId);
     if (mounted) Navigator.pop(context);
   }
 

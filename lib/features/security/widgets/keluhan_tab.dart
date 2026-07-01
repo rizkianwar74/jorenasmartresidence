@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/services/keluhan_service.dart';
+import '../../../core/data/keluhan_repository.dart';
 import '../../../core/services/onesignal_service.dart';
 import '../data/security_repository.dart';
 import '../helpers/status_keluhan_helpers.dart';
@@ -45,7 +45,7 @@ class _KeluhanTabState extends State<KeluhanTab>
       onDuty = (data?['isOnDuty'] as bool?) ?? false;
     } catch (_) {}
     if (!mounted) return;
-    _sub = KeluhanService.watchSatpamInbox(uid, includeShared: onDuty).listen(
+    _sub = KeluhanRepository.watchSatpamInbox(uid, includeShared: onDuty).listen(
       (list) {
         if (mounted) setState(() { _items = list; _loading = false; });
       },
@@ -79,7 +79,7 @@ class _KeluhanTabState extends State<KeluhanTab>
     // Saat satpam menangani, keluhan diklaim jadi miliknya (keluar dari
     // kolam bersama satpam lain).
     final repo = SecurityRepository.instance;
-    await KeluhanService.updateStatus(
+    await KeluhanRepository.updateStatus(
       keluhanId   : item.id,
       status      : newStatus,
       adminNote   : note,

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/services/keluhan_service.dart';
+import '../../../../core/data/keluhan_repository.dart';
 import '../../../../core/services/onesignal_service.dart';
 import 'reports_shared_widgets.dart';
 import 'reports_dialogs.dart';
@@ -26,7 +26,7 @@ class _DetailPanelState extends State<DetailPanel> {
   Future<void> _showAssignDialog(KeluhanItem item) async {
     List<SatpamInfo> satpamList;
     try {
-      satpamList = await KeluhanService.getSatpamList();
+      satpamList = await KeluhanRepository.getSatpamList();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -105,7 +105,7 @@ class _DetailPanelState extends State<DetailPanel> {
     ).then((result) async {
       if (result is SatpamInfo) {
         setState(() => _assigning = true);
-        await KeluhanService.assignKeluhan(
+        await KeluhanRepository.assignKeluhan(
           keluhanId  : item.id,
           satpamUid  : result.uid,
           satpamNama : result.nama,
@@ -132,7 +132,7 @@ class _DetailPanelState extends State<DetailPanel> {
   }
 
   Future<void> _updateStatus(KeluhanItem item, StatusKeluhan s) async {
-    await KeluhanService.updateStatus(keluhanId: item.id, status: s);
+    await KeluhanRepository.updateStatus(keluhanId: item.id, status: s);
     if (mounted) widget.onAssigned();
     // Notifikasi ke warga pemilik keluhan (fire-and-forget).
     OneSignalService.instance.sendKeluhanUpdate(

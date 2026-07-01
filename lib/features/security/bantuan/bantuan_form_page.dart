@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/services/bantuan_service.dart';
+import '../../../core/data/bantuan_repository.dart';
 import '../../../core/router/app_router.dart';
 import 'bantuan_satpam_page.dart';
 
@@ -34,7 +34,7 @@ class _BantuanFormPageState extends State<BantuanFormPage> {
   }
 
   Future<void> _loadLokasi() async {
-    final lokasi = await BantuanService.getUserLokasi();
+    final lokasi = await BantuanRepository.getUserLokasi();
     if (mounted) setState(() => _lokasi = lokasi);
   }
 
@@ -63,7 +63,7 @@ class _BantuanFormPageState extends State<BantuanFormPage> {
   Future<void> _kirimLaporan() async {
     setState(() => _isLoading = true);
 
-    final result = await BantuanService.sendRequest(
+    final result = await BantuanRepository.sendRequest(
       kategori: widget.category.title,
       catatan: _catatanController.text.trim(),
       fotos: _selectedImages,

@@ -2,7 +2,7 @@ import 'dart:typed_data';
 import 'dart:ui';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'sos_service.dart';
+import '../data/sos_repository.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Channel ID constants

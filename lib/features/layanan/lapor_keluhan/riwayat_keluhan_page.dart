@@ -5,7 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/responsive_helper.dart';
-import '../../../core/services/keluhan_service.dart';
+import '../../../core/data/keluhan_repository.dart';
 import '../../auth/auth_repository.dart';
 import 'lapor_keluhan_page.dart';
 
@@ -35,7 +35,7 @@ class _RiwayatKeluhanPageState extends State<RiwayatKeluhanPage> {
       setState(() => _loading = false);
       return;
     }
-    _sub = KeluhanService.watchMyKeluhan(uid).listen(
+    _sub = KeluhanRepository.watchMyKeluhan(uid).listen(
       (list) {
         if (mounted) setState(() { _items = list; _loading = false; });
       },
@@ -716,7 +716,7 @@ class _BuatLaporanBanner extends StatelessWidget {
 }
 
 // ── Gambar foto bukti keluhan — aware base64 (data URI) maupun URL http.
-// KeluhanService.sendKeluhan kini menyimpan base64, sama seperti foto
+// KeluhanRepository.sendKeluhan kini menyimpan base64, sama seperti foto
 // profil/bantuan/patroli — Image.network saja tidak bisa decode itu.
 class _RiwayatFotoImage extends StatelessWidget {
   const _RiwayatFotoImage({required this.url});

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -6,9 +7,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:audioplayers/audioplayers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/router/app_router.dart';
-import '../../core/services/sos_service.dart';
+import '../../core/data/sos_repository.dart';
 import '../../core/services/sos_notification_service.dart';
-import '../../core/services/bantuan_service.dart';
+import '../../core/data/bantuan_repository.dart';
 import '../auth/auth_repository.dart';
 import '../security/data/security_repository.dart';
 import '../../core/services/onesignal_service.dart';
@@ -236,7 +237,7 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
   }
 
   void _startListeningSos() {
-    _alertSub = SosService.watchActiveAlerts().listen(
+    _alertSub = SosRepository.watchActiveAlerts().listen(
       (alerts) async {
         // setState dulu agar kartu SOS muncul segera
         if (mounted) setState(() => _activeAlerts = alerts);
@@ -310,7 +311,7 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
 
   // ── Stream bantuan non-SOS ─────────────────────────────────────────────────
   void _startListeningBantuan() {
-    _bantuanSub = BantuanService.watchActiveRequests().listen(
+    _bantuanSub = BantuanRepository.watchActiveRequests().listen(
       (list) => _processBantuan(list),
       onError: (e) {
         // Tangkap error Firestore (misal rules belum diset)
@@ -412,7 +413,7 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
     HapticFeedback.mediumImpact();
     await _bantuanPlayer.stop();
     final uid = SecurityRepository.instance.currentSatpamUidOrNull;
-    await BantuanService.updateStatus(
+    await BantuanRepository.updateStatus(
       requestId: req.id,
       status: BantuanStatus.onMyWay,
       respondedBy: uid,
@@ -421,7 +422,7 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
 
   Future<void> _onBantuanResolved(BantuanRequest req) async {
     HapticFeedback.mediumImpact();
-    await BantuanService.updateStatus(
+    await BantuanRepository.updateStatus(
       requestId: req.id,
       status: BantuanStatus.resolved,
     );
@@ -450,7 +451,7 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
     _stopRinging();
     final repo = SecurityRepository.instance;
     final uid  = repo.currentSatpamUidOrNull;
-    await SosService.updateStatus(
+    await SosRepository.updateStatus(
       alertId: alert.id,
       status: SosStatus.onMyWay,
       respondedBy: uid,
@@ -471,7 +472,7 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
 
   Future<void> _onResolved(SosAlert alert) async {
     HapticFeedback.mediumImpact();
-    await SosService.updateStatus(
+    await SosRepository.updateStatus(
       alertId: alert.id,
       status: SosStatus.resolved,
     );

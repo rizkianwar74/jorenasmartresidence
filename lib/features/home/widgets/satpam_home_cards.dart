@@ -20,10 +20,26 @@ class _TopBar extends StatelessWidget {
   final bool               isSaving;
   final ValueChanged<bool> onToggle;
 
+  /// Decode base64 data URI → MemoryImage. Return null bila bukan base64.
+  ImageProvider? _resolveImage() {
+    if (photoUrl == null || photoUrl!.isEmpty) return null;
+    if (photoUrl!.startsWith('data:')) {
+      try {
+        final base64Str = photoUrl!.split(',').last;
+        return MemoryImage(base64Decode(base64Str));
+      } catch (_) {
+        return null;
+      }
+    }
+    return NetworkImage(photoUrl!);
+  }
+
   @override
   Widget build(BuildContext context) {
     const activeColor   = Color(0xFF16A34A);
     const inactiveColor = Color(0xFF94A3B8);
+
+    final image = _resolveImage();
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -33,10 +49,8 @@ class _TopBar extends StatelessWidget {
           CircleAvatar(
             radius: 20,
             backgroundColor: AppColors.primary.withValues(alpha: 0.15),
-            backgroundImage: (photoUrl != null && photoUrl!.isNotEmpty)
-                ? NetworkImage(photoUrl!)
-                : null,
-            child: (photoUrl == null || photoUrl!.isEmpty)
+            backgroundImage: image,
+            child: image == null
                 ? Text(
                     namaUser.isNotEmpty ? namaUser[0].toUpperCase() : '?',
                     style: GoogleFonts.inter(

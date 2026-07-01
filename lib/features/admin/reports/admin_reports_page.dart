@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/services/keluhan_service.dart';
+import '../../../core/data/keluhan_repository.dart';
 import '../widgets/admin_sidebar.dart';
 import '../widgets/admin_top_bar.dart';
 import 'widgets/reports_shared_widgets.dart';
@@ -30,7 +30,7 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
   @override
   void initState() {
     super.initState();
-    _sub = KeluhanService.watchAllKeluhan().listen(
+    _sub = KeluhanRepository.watchAllKeluhan().listen(
       (list) {
         if (mounted) setState(() { _all = list; _loading = false; });
       },

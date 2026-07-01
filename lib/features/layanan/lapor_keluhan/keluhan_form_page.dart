@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/services/keluhan_service.dart';
+import '../../../core/data/keluhan_repository.dart';
 import 'lapor_keluhan_page.dart';
 
 class KeluhanFormPage extends StatefulWidget {
@@ -51,12 +51,12 @@ class _KeluhanFormPageState extends State<KeluhanFormPage> {
   void _removeImage(int index) =>
       setState(() => _selectedImages.removeAt(index));
 
-  // ── Kirim ke Firestore via KeluhanService ─────────────────────────────────
+  // ── Kirim ke Firestore via KeluhanRepository ─────────────────────────────────
   Future<void> _kirimLaporan() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
 
-    final (result, fotoErrors) = await KeluhanService.sendKeluhan(
+    final (result, fotoErrors) = await KeluhanRepository.sendKeluhan(
       kategori  : widget.category.title,
       judul     : _judulController.text.trim(),
       deskripsi : _deskripsiController.text.trim(),

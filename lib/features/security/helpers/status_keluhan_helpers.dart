@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/services/keluhan_service.dart'; // contains StatusKeluhan enum
+import '../../../core/data/keluhan_repository.dart'; // contains StatusKeluhan enum
 
 extension StatusKeluhanExtension on StatusKeluhan {
   String get label => switch (this) {

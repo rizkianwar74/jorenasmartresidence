@@ -5,7 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import '../../features/auth/auth_repository.dart';
-import 'onesignal_service.dart';
+import '../services/onesignal_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Enum
@@ -77,7 +77,7 @@ class BantuanRequest {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Helper konversi — sama persis dengan SosService
+// Helper konversi — sama persis dengan SosRepository
 // ─────────────────────────────────────────────────────────────────────────────
 
 BantuanStatus _parseStatus(String? raw) {
@@ -99,7 +99,7 @@ String _statusString(BantuanStatus s) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BantuanService — struktur sama dengan SosService, versi lebih simple
+// BantuanRepository — struktur sama dengan SosRepository, versi lebih simple
 //
 // Collection: bantuanrequest
 // Schema:
@@ -109,8 +109,8 @@ String _statusString(BantuanStatus s) {
 //   respondedBy — String / null
 // ─────────────────────────────────────────────────────────────────────────────
 
-class BantuanService {
-  BantuanService._();
+class BantuanRepository {
+  BantuanRepository._();
 
   static final _col = FirebaseFirestore.instance.collection('bantuanrequest');
 
@@ -256,7 +256,7 @@ class BantuanService {
     }
   }
 
-  // ── Watch satu dokumen by ID — SAMA PERSIS dengan SosService.watchAlert ───
+  // ── Watch satu dokumen by ID — SAMA PERSIS dengan SosRepository.watchAlert ───
   static Stream<BantuanRequest?> watchRequest(String requestId) {
     return _col.doc(requestId).snapshots().map((snap) {
       if (!snap.exists) return null;
@@ -293,7 +293,7 @@ class BantuanService {
           _activeRequestId = sorted.first.id;
         }
       } catch (e) {
-        debugPrint('[BantuanService] lookup error: $e');
+        debugPrint('[BantuanRepository] lookup error: $e');
       }
     }
 
@@ -319,7 +319,7 @@ class BantuanService {
         }
         return req;
       } catch (e) {
-        debugPrint('[BantuanService] parse error: $e');
+        debugPrint('[BantuanRepository] parse error: $e');
         return null;
       }
     });
@@ -336,7 +336,7 @@ class BantuanService {
             try {
               list.add(BantuanRequest.fromDoc(doc));
             } catch (e) {
-              debugPrint('[BantuanService] skip doc ${doc.id}: $e');
+              debugPrint('[BantuanRepository] skip doc ${doc.id}: $e');
             }
           }
           list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -356,7 +356,7 @@ class BantuanService {
               final r = BantuanRequest.fromDoc(doc);
               if (r.respondedBy == null || r.respondedBy!.isEmpty) list.add(r);
             } catch (e) {
-              debugPrint('[BantuanService] skip ${doc.id}: $e');
+              debugPrint('[BantuanRepository] skip ${doc.id}: $e');
             }
           }
           list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -377,7 +377,7 @@ class BantuanService {
               if (r.status == BantuanStatus.pending ||
                   r.status == BantuanStatus.onMyWay) list.add(r);
             } catch (e) {
-              debugPrint('[BantuanService] skip ${doc.id}: $e');
+              debugPrint('[BantuanRepository] skip ${doc.id}: $e');
             }
           }
           list.sort((a, b) => b.createdAt.compareTo(a.createdAt));

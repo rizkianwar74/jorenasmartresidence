@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/services/bantuan_service.dart';
+import '../../core/data/bantuan_repository.dart';
 import '../../core/services/onesignal_service.dart';
 import 'data/security_repository.dart';
 
@@ -40,7 +40,7 @@ class _SatpamLaporanPageState extends State<SatpamLaporanPage> {
       onDuty = (data?['isOnDuty'] as bool?) ?? false;
     } catch (_) {}
     if (!mounted) return;
-    _sub = BantuanService.watchSatpamInbox(uid, includeShared: onDuty).listen(
+    _sub = BantuanRepository.watchSatpamInbox(uid, includeShared: onDuty).listen(
       (list) {
         if (mounted) setState(() { _requests = list; _loading = false; });
       },
@@ -64,7 +64,7 @@ class _SatpamLaporanPageState extends State<SatpamLaporanPage> {
     HapticFeedback.mediumImpact();
     final repo = SecurityRepository.instance;
     final uid  = repo.currentSatpamUidOrNull;
-    await BantuanService.updateStatus(
+    await BantuanRepository.updateStatus(
       requestId: req.id,
       status: BantuanStatus.onMyWay,
       respondedBy: uid,
@@ -108,7 +108,7 @@ class _SatpamLaporanPageState extends State<SatpamLaporanPage> {
       ),
     );
     if (confirm == true) {
-      await BantuanService.updateStatus(
+      await BantuanRepository.updateStatus(
         requestId: req.id,
         status: BantuanStatus.resolved,
       );
@@ -744,7 +744,7 @@ class _BantuanFotoViewerState extends State<_BantuanFotoViewer> {
 
 // ── Gambar foto bantuan — aware base64 (data URI) maupun URL http biasa.
 // Disamakan dengan pola ProfileAvatar: base64 dipakai untuk foto baru (lihat
-// BantuanService.sendRequest), tapi tetap dukung URL http kalau ada data
+// BantuanRepository.sendRequest), tapi tetap dukung URL http kalau ada data
 // lama yang sempat tersimpan lewat Firebase Storage sebelumnya.
 class _BantuanFotoImage extends StatelessWidget {
   const _BantuanFotoImage({

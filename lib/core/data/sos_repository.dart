@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../features/auth/auth_repository.dart';
-import 'onesignal_service.dart';
+import '../services/onesignal_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Enum
@@ -126,11 +126,11 @@ String _statusString(SosStatus s) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SosService
+// SosRepository
 // ─────────────────────────────────────────────────────────────────────────────
 
-class SosService {
-  SosService._();
+class SosRepository {
+  SosRepository._();
 
   static final _col =
       FirebaseFirestore.instance.collection('sosalert');

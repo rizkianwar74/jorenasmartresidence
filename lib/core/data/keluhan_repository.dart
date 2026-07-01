@@ -5,7 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import '../../features/auth/auth_repository.dart';
-import 'onesignal_service.dart';
+import '../services/onesignal_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Enum status
@@ -118,18 +118,18 @@ class KeluhanItem {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// KeluhanService
+// KeluhanRepository
 //
 // Collection : keluhan
 // Foto       : disimpan langsung sebagai data URI base64 di field `fotoUrls`
 //              pada dokumen yang sama — SAMA seperti foto profil
-//              (AuthRepository.updatePhotoUrl) & BantuanService.sendRequest.
+//              (AuthRepository.updatePhotoUrl) & BantuanRepository.sendRequest.
 //              Tidak lagi lewat Firebase Storage, supaya konsisten dan
 //              menghindari error CORS Storage di Flutter Web.
 // ─────────────────────────────────────────────────────────────────────────────
 
-class KeluhanService {
-  KeluhanService._();
+class KeluhanRepository {
+  KeluhanRepository._();
 
   static final _col = FirebaseFirestore.instance.collection('keluhan');
 
@@ -177,7 +177,7 @@ class KeluhanService {
         try {
           urls.add('data:image/jpeg;base64,${base64Encode(fotos[i])}');
         } catch (e) {
-          debugPrint('[KeluhanService] encode foto[$i] error: $e');
+          debugPrint('[KeluhanRepository] encode foto[$i] error: $e');
           fotoErrors.add('Foto ${i + 1}: $e');
         }
       }
@@ -220,7 +220,7 @@ class KeluhanService {
 
       return (item, fotoErrors);
     } catch (e) {
-      debugPrint('[KeluhanService] sendKeluhan error: $e');
+      debugPrint('[KeluhanRepository] sendKeluhan error: $e');
       return (null, <String>[]);
     }
   }
@@ -237,7 +237,7 @@ class KeluhanService {
             try {
               list.add(KeluhanItem.fromDoc(doc));
             } catch (e) {
-              debugPrint('[KeluhanService] skip doc ${doc.id}: $e');
+              debugPrint('[KeluhanRepository] skip doc ${doc.id}: $e');
             }
           }
           // Sort terbaru di atas — client-side, tidak perlu composite index
@@ -254,7 +254,7 @@ class KeluhanService {
         try {
           list.add(KeluhanItem.fromDoc(doc));
         } catch (e) {
-          debugPrint('[KeluhanService] skip doc ${doc.id}: $e');
+          debugPrint('[KeluhanRepository] skip doc ${doc.id}: $e');
         }
       }
       list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -284,7 +284,7 @@ class KeluhanService {
       await _col.doc(keluhanId).update(data);
       return true;
     } catch (e) {
-      debugPrint('[KeluhanService] updateStatus error: $e');
+      debugPrint('[KeluhanRepository] updateStatus error: $e');
       return false;
     }
   }
@@ -304,7 +304,7 @@ class KeluhanService {
       });
       return true;
     } catch (e) {
-      debugPrint('[KeluhanService] assignKeluhan error: $e');
+      debugPrint('[KeluhanRepository] assignKeluhan error: $e');
       return false;
     }
   }
@@ -319,7 +319,7 @@ class KeluhanService {
           final list = <KeluhanItem>[];
           for (final doc in snap.docs) {
             try { list.add(KeluhanItem.fromDoc(doc)); }
-            catch (e) { debugPrint('[KeluhanService] skip ${doc.id}: $e'); }
+            catch (e) { debugPrint('[KeluhanRepository] skip ${doc.id}: $e'); }
           }
           list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
           return list;
@@ -339,7 +339,7 @@ class KeluhanService {
               final k = KeluhanItem.fromDoc(doc);
               if (k.assignedTo == null || k.assignedTo!.isEmpty) list.add(k);
             } catch (e) {
-              debugPrint('[KeluhanService] skip ${doc.id}: $e');
+              debugPrint('[KeluhanRepository] skip ${doc.id}: $e');
             }
           }
           list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -384,7 +384,7 @@ class KeluhanService {
         .collection('users')
         .where('role', isEqualTo: 'satpam')
         .get();
-    debugPrint('[KeluhanService] getSatpamList: ${snap.docs.length} docs found');
+    debugPrint('[KeluhanRepository] getSatpamList: ${snap.docs.length} docs found');
     return snap.docs.map((doc) {
       final d = doc.data();
       // Coba berbagai kemungkinan nama field

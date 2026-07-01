@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/services/bantuan_service.dart';
+import '../../core/data/bantuan_repository.dart';
 import '../../shared/widgets/bottom_nav_bar.dart';
 import '../../core/router/app_router.dart';
 import '../auth/auth_repository.dart';
@@ -83,7 +83,7 @@ class _HomePageState extends State<HomePage> {
     final uid = AuthRepository.currentUid;
     if (uid == null) return;
     _bantuanSub?.cancel();
-    _bantuanSub = BantuanService.watchMyActiveRequest(uid).listen(
+    _bantuanSub = BantuanRepository.watchMyActiveRequest(uid).listen(
       (req) {
         if (mounted) setState(() => _activeBantuan = req);
       },
@@ -313,7 +313,7 @@ class _HomePageState extends State<HomePage> {
       ),
     );
     if (confirm == true) {
-      await BantuanService.cancelRequest(requestId);
+      await BantuanRepository.cancelRequest(requestId);
     }
   }
 
