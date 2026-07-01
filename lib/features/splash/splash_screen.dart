@@ -175,7 +175,7 @@ class _SplashScreenState extends State<SplashScreen>
                         ),
                         const SizedBox(height: 24),
                         Text(
-                          'SMART RESIDENCE V2.4.1',
+                          'SMART RESIDENCE V1.0.0',
                           style: GoogleFonts.inter(
                             fontSize: 11,
                             color: const Color(0xFF94A3B8),
