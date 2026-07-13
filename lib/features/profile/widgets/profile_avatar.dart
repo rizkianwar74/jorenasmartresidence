@@ -1,6 +1,6 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../shared/widgets/smart_image.dart';
 
 class ProfileAvatar extends StatelessWidget {
   const ProfileAvatar({
@@ -25,21 +25,9 @@ class ProfileAvatar extends StatelessWidget {
     return parts[0][0].toUpperCase();
   }
 
-  bool get _isBase64 =>
-      imageUrl != null && imageUrl!.startsWith('data:image');
-
-  ImageProvider? get _imageProvider {
-    if (imageUrl == null || imageUrl!.isEmpty) return null;
-    if (_isBase64) {
-      final base64Str = imageUrl!.split(',').last;
-      return MemoryImage(base64Decode(base64Str));
-    }
-    return NetworkImage(imageUrl!);
-  }
-
   @override
   Widget build(BuildContext context) {
-    final provider = _imageProvider;
+    final provider = SmartImage.provider(imageUrl);
     return Stack(
       children: [
         Container(

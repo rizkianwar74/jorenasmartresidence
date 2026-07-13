@@ -12,7 +12,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/router/app_router.dart';
-import '../auth/auth_repository.dart';
+import '../auth/data/auth_repository.dart';
 import 'widgets/profile_avatar.dart';
 import 'widgets/unit_info_card.dart';
 import 'widgets/personal_info_card.dart';
@@ -396,7 +396,16 @@ class _ProfilPageState extends State<ProfilPage> {
                   label: 'Pengaturan Akun',
                   isFirst: true,
                   isLast: true,
-                  onTap: () => Navigator.pushNamed(context, AppRouter.pengaturan),
+                  // Tunggu halaman Pengaturan ditutup, lalu setState supaya
+                  // build() di atas membaca ulang AuthRepository.currentUser
+                  // yang terbaru (mis. nama/no HP/alamat baru saja diganti).
+                  // Tanpa ini, ProfilPage tetap menampilkan data lama karena
+                  // Navigator.pop() tidak otomatis me-rebuild halaman di
+                  // bawahnya.
+                  onTap: () async {
+                    await Navigator.pushNamed(context, AppRouter.pengaturan);
+                    if (mounted) setState(() {});
+                  },
                 ),
 
                 const SizedBox(height: 28),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/app_colors.dart';
-import '../auth/auth_repository.dart';
+import '../auth/data/auth_repository.dart';
 
 class PengaturanPage extends StatefulWidget {
   const PengaturanPage({super.key});
@@ -24,7 +24,7 @@ class _PengaturanPageState extends State<PengaturanPage> {
   void initState() {
     super.initState();
     final user   = AuthRepository.currentUser;
-    _username    = user?.username     ?? '-';
+    _username    = user?.namaLengkap ?? '-';
     _nomorHp     = user?.nomorHp      ?? '-';
     _tanggalLahir = user?.tanggalLahir ?? '-';
     _blok        = user?.blok         ?? '-';
@@ -36,14 +36,14 @@ class _PengaturanPageState extends State<PengaturanPage> {
     final items = [
       _SettingItem(
         icon : Icons.person_outline,
-        label: 'Username',
+        label: 'Nama Pengguna',
         value: _username,
         onTap: () => _showEditDialog(
           context,
-          title        : 'Ganti Username',
-          fieldLabel   : 'Username baru',
+          title        : 'Ganti Nama Pengguna',
+          fieldLabel   : 'Nama baru',
           currentValue : _username == '-' ? '' : _username,
-          onSave       : (val) => _saveField('username', val,
+          onSave       : (val) => _saveField('namaLengkap', val,
               () => setState(() => _username = val.trim())),
         ),
       ),
