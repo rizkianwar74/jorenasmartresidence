@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../features/auth/auth_repository.dart';
+import '../../features/auth/data/auth_repository.dart';
 import '../services/onesignal_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────

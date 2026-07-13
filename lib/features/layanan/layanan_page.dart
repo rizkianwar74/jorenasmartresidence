@@ -5,10 +5,11 @@ import '../../core/utils/responsive_helper.dart';
 import '../../shared/widgets/bottom_nav_bar.dart';
 import 'widgets/service_card.dart';
 import 'lapor_keluhan/lapor_keluhan_page.dart';
-import 'kantin/kantin_page.dart';
-import 'fasilitas/fasilitas_page.dart';
 import 'pusat_bantuan/pusat_bantuan_page.dart';
 import 'widgets/service_help_banner.dart';
+// Saat kantin/fasilitas siap: ganti KantinPage → KantinOrderPage, FasilitasPage → FasilitasBookingPage
+import 'kantin/kantin_page.dart';
+import 'fasilitas/fasilitas_page.dart';
 
 class LayananPage extends StatelessWidget {
   const LayananPage({super.key});

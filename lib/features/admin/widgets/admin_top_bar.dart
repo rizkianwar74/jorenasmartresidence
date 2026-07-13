@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/router/app_router.dart';
-import '../../auth/auth_repository.dart';
+import '../../auth/data/auth_repository.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AdminTopBar — reusable di semua halaman admin

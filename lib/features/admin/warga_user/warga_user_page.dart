@@ -31,14 +31,33 @@ class _WargaUserPageState extends State<WargaUserPage> {
 
   // ── Derived ───────────────────────────────────────────────────────────────
   List<String> get _filterOptions {
-    final bloks = _allWarga.map((w) => w.blok).toSet().toList()..sort();
-    return ['All Units', ...bloks];
+    // Blok hanya diambil dari nilai yang benar-benar terisi — satpam sudah
+    // punya chip filter tersendiri (kSatpamFilterValue), jadi tidak perlu
+    // lagi "menyamar" sebagai blok kosong di sini.
+    final bloks = _allWarga
+        .map((w) => w.blok)
+        .where((b) => b.trim().isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+    final hasSatpam = _allWarga.any((w) => w.role == 'satpam');
+    return [
+      'All Units',
+      if (hasSatpam) kSatpamFilterValue,
+      ...bloks,
+    ];
   }
 
   List<AdminWargaModel> get _filtered {
     final q = _searchQuery.toLowerCase();
     return _allWarga.where((w) {
-      final matchBlok = _selectedBlok == 'All Units' || w.blok == _selectedBlok;
+      // Exclude akun admin — tidak perlu dikelola dari halaman ini
+      if (w.role == 'admin') return false;
+      final matchBlok = switch (_selectedBlok) {
+        'All Units'          => true,
+        kSatpamFilterValue   => w.role == 'satpam',
+        _                    => w.blok == _selectedBlok,
+      };
       final matchSearch = q.isEmpty ||
           w.namaLengkap.toLowerCase().contains(q) ||
           w.nomorUnit.contains(q) ||
@@ -66,7 +85,12 @@ class _WargaUserPageState extends State<WargaUserPage> {
   }
 
   void _startListening() {
-    _sub = AdminRepository.instance.wargaSortedStream().listen((snap) {
+    // allUsersSortedStream() mengambil SEMUA users (tanpa filter role, tanpa
+    // orderBy di server — lihat catatan di admin_repository.dart soal kenapa
+    // akun satpam bisa hilang total kalau pakai orderBy Firestore). Filter
+    // admin dilakukan di sisi UI (_filtered getter di atas), dan urutan
+    // blok → nomorUnit dilakukan di sini, client-side.
+    _sub = AdminRepository.instance.allUsersSortedStream().listen((snap) {
       if (!mounted) return;
       setState(() {
         _allWarga = snap.docs
@@ -74,7 +98,12 @@ class _WargaUserPageState extends State<WargaUserPage> {
                   d.id,
                   d.data() as Map<String, dynamic>,
                 ))
-            .toList();
+            .toList()
+          ..sort((a, b) {
+            final blokCompare = a.blok.compareTo(b.blok);
+            if (blokCompare != 0) return blokCompare;
+            return a.nomorUnit.compareTo(b.nomorUnit);
+          });
         _loading = false;
       });
     }, onError: (_) {
@@ -94,10 +123,12 @@ class _WargaUserPageState extends State<WargaUserPage> {
     String blok,
     String nomorUnit,
     String? komunitasRole,
+    String role,
   ) async {
     final Map<String, dynamic> data = {
       'blok'     : blok.trim().toUpperCase(),
       'nomorUnit': nomorUnit.trim(),
+      'role'     : role,
     };
     if (komunitasRole == null || komunitasRole.isEmpty) {
       data['komunitasRole'] = FieldValue.delete();
@@ -113,13 +144,15 @@ class _WargaUserPageState extends State<WargaUserPage> {
 
   // ── Dialogs ───────────────────────────────────────────────────────────────
   void _showEditDialog(BuildContext context, AdminWargaModel w) {
-    final blokCtrl   = TextEditingController(text: w.blok);
-    final nomorCtrl  = TextEditingController(text: w.nomorUnit);
+    final blokCtrl  = TextEditingController(text: w.blok);
+    final nomorCtrl = TextEditingController(text: w.nomorUnit);
     // Pastikan nilai ada di opsi; kalau tidak (data lama), fallback ke ''
-    String? jabatan  = jabatanOptions.contains(w.komunitasRole)
+    String? jabatan = jabatanOptions.contains(w.komunitasRole)
         ? w.komunitasRole
         : '';
-    bool saving      = false;
+    // Role default ke 'user' jika nilai tidak dikenal
+    String selectedRole = roleOptions.contains(w.role) ? w.role : 'user';
+    bool saving         = false;
 
     showDialog(
       context: context,
@@ -186,6 +219,51 @@ class _WargaUserPageState extends State<WargaUserPage> {
                       .toList(),
                   onChanged: (v) => setS(() => jabatan = v),
                 ),
+                const SizedBox(height: 16),
+
+                // ── Role Sistem ──────────────────────────────────────────
+                const DialogLabel('Role Sistem'),
+                const SizedBox(height: 6),
+                DropdownButtonFormField<String>(
+                  value: selectedRole,
+                  style: GoogleFonts.inter(
+                      fontSize: 14, color: AppColors.textDark),
+                  decoration: wargaInputDecoration('Pilih role'),
+                  items: roleOptions
+                      .map((r) => DropdownMenuItem(
+                            value: r,
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: r == 'satpam'
+                                        ? const Color(0xFF16A34A)
+                                        : AppColors.primary,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  r == 'satpam' ? 'Satpam' : 'Warga (User)',
+                                  style: GoogleFonts.inter(fontSize: 13),
+                                ),
+                              ],
+                            ),
+                          ))
+                      .toList(),
+                  onChanged: (v) => setS(() => selectedRole = v ?? 'user'),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Role Admin hanya dapat diset melalui Firebase Console.',
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    color: AppColors.textGrey,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
               ],
             ),
           ),
@@ -208,6 +286,7 @@ class _WargaUserPageState extends State<WargaUserPage> {
                           blokCtrl.text,
                           nomorCtrl.text,
                           jabatan,
+                          selectedRole,
                         );
                         if (ctx.mounted) Navigator.pop(ctx);
                         if (context.mounted) {
@@ -385,7 +464,7 @@ class _WargaUserPageState extends State<WargaUserPage> {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    'Kelola data dan jabatan komunitas warga residence.',
+                                    'Kelola data, jabatan, dan role warga & satpam.',
                                     style: GoogleFonts.inter(
                                       fontSize: 13,
                                       color: AppColors.textGrey,
@@ -395,14 +474,16 @@ class _WargaUserPageState extends State<WargaUserPage> {
                               ),
                             ),
                             MiniStatCard(
-                              label: 'TOTAL WARGA',
-                              value: _loading ? '...' : '${_allWarga.length}',
+                              label: 'TOTAL',
+                              value: _loading ? '...' : '${_filtered.length}',
                             ),
                             const SizedBox(width: 12),
                             MiniStatCard(
-                              label: 'TAMPIL',
-                              value: _loading ? '...' : '${_filtered.length}',
-                              valueColor: AppColors.primary,
+                              label: 'SATPAM',
+                              value: _loading
+                                  ? '...'
+                                  : '${_filtered.where((w) => w.role == 'satpam').length}',
+                              valueColor: const Color(0xFF16A34A),
                             ),
                           ],
                         ),

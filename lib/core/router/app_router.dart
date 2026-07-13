@@ -1,33 +1,35 @@
 import 'package:flutter/material.dart';
 import '../../features/splash/splash_screen.dart';
-import '../../features/auth/login_page.dart';
-import '../../features/auth/register_page.dart';
-import '../../features/auth/forgot_password_page.dart';
-import '../../features/auth/auth_repository.dart';
+import '../../features/auth/pages/login_page.dart';
+import '../../features/auth/pages/register_page.dart';
+import '../../features/auth/pages/forgot_password_page.dart';
+import '../../features/auth/data/auth_repository.dart';
 import '../../features/home/home_page.dart';
-import '../../features/home/satpam_home_page.dart';
+import '../../features/satpam/home/satpam_home_page.dart';
 import '../../features/layanan/layanan_page.dart';
 import '../../features/komunitas/komunitas_page.dart';
 import '../../features/profile/profil_page.dart';
 import '../../features/profile/pengaturan_page.dart';
 import '../../features/security/security_page.dart';
 import '../../features/security/bantuan/bantuan_satpam_page.dart';
-import '../../features/security/satpam_patroli_page.dart';
-import '../../features/security/satpam_reports_page.dart';
-import '../../features/security/satpam_catat_tamu_page.dart';
+import '../../features/satpam/patroli/satpam_patroli_page.dart';
+import '../../features/satpam/laporan/satpam_reports_page.dart';
+import '../../features/satpam/tamu/satpam_catat_tamu_page.dart';
 import '../../features/pembayaran/tagihan_page.dart';
 import '../../features/admin/home/admin_home_page.dart';
 import '../../features/admin/warga_user/warga_user_page.dart';
 import '../../features/admin/security/admin_security_page.dart';
-import '../../features/admin/admin_facilities_page.dart';
+import '../../features/admin/fasilitas/admin_facilities_page.dart';
 import '../../features/admin/reports/admin_reports_page.dart';
-import '../../features/admin/admin_berita_page.dart';
+import '../../features/admin/berita/admin_berita_page.dart';
 import '../../features/admin/billing/admin_billing_page.dart';
-import '../../features/admin/admin_insiden_page.dart';
-import '../../features/admin/admin_daftar_tamu_page.dart';
-import '../../features/security/satpam_laporan_page.dart';
-import '../../features/security/satpam_daftar_tamu_page.dart';
-import '../../features/security/satpam_insiden_page.dart';
+import '../../features/admin/insiden/admin_insiden_page.dart';
+import '../../features/admin/tamu/admin_daftar_tamu_page.dart';
+import '../../features/satpam/laporan/satpam_laporan_page.dart';
+import '../../features/satpam/tamu/satpam_daftar_tamu_page.dart';
+import '../../features/satpam/insiden/satpam_insiden_page.dart';
+import '../../features/layanan/kantin/kantin_order_page.dart';
+import '../../features/layanan/fasilitas/fasilitas_booking_page.dart';
 
 class AppRouter {
   AppRouter._();
@@ -61,6 +63,10 @@ class AppRouter {
   static const String adminBilling     = '/admin/billing';
   static const String adminInsiden     = '/admin/insiden';
   static const String adminDaftarTamu  = '/admin/daftar-tamu';
+  // Gunakan route ini saat kantin sudah beroperasi dan ganti target di layanan_page.dart
+  static const String kantinOrder      = '/kantin/order';
+  // Gunakan route ini saat fasilitas sudah dibangun dan ganti target di layanan_page.dart
+  static const String fasilitasBooking = '/fasilitas/booking';
 
   // ── Route generator ───────────────────────────────────────────────
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
@@ -128,6 +134,10 @@ class AppRouter {
         return _slide(const SatpamDaftarTamuPage(), settings);
       case satpamInsiden:
         return _slide(const SatpamInsidenPage(), settings);
+      case kantinOrder:
+        return _slide(const KantinOrderPage(), settings);
+      case fasilitasBooking:
+        return _slide(const FasilitasBookingPage(), settings);
       default:
         return _fade(const SplashScreen(), settings);
     }

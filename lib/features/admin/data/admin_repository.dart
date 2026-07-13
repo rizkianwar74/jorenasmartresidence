@@ -48,6 +48,21 @@ class AdminRepository {
       .orderBy('nomorUnit')
       .snapshots();
 
+  /// Stream semua user (user + satpam, exclude admin) — TANPA orderBy.
+  ///
+  /// Sengaja tidak pakai `.orderBy('blok').orderBy('nomorUnit')`: Firestore
+  /// akan MENGECUALIKAN dokumen yang tidak punya field tersebut sama sekali
+  /// dari hasil query orderBy. Akun satpam biasanya dibuat langsung lewat
+  /// Firebase Console tanpa field `blok`/`nomorUnit` (karena tidak tinggal di
+  /// unit manapun) — akibatnya akun satpam itu hilang total dari daftar,
+  /// bukan cuma tampil di posisi yang salah. Urutan blok → nomorUnit
+  /// sekarang dilakukan client-side (lihat _WargaUserPageState) agar semua
+  /// user tetap muncul terlepas dari kelengkapan field-nya. Ini juga
+  /// menghindari kebutuhan composite index tambahan.
+  /// Filter 'admin' dilakukan di sisi UI (role != 'admin').
+  Stream<QuerySnapshot<Map<String, dynamic>>> allUsersSortedStream() =>
+      _db.collection(_users).snapshots();
+
   Future<void> updateWarga(String uid, Map<String, dynamic> data) =>
       _db.collection(_users).doc(uid).update(data);
 

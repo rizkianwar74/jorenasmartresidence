@@ -1,11 +1,10 @@
-import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart' show DateFormat;
 import '../../core/theme/app_colors.dart';
+import '../../shared/widgets/smart_image.dart';
 import '../../core/utils/responsive_helper.dart';
-import '../admin/models/berita_doc.dart';
+import 'models/berita_doc.dart';
 
 class BeritaDetailPage extends StatelessWidget {
   const BeritaDetailPage({super.key, required this.berita});
@@ -63,7 +62,7 @@ class BeritaDetailPage extends StatelessWidget {
                       width: double.infinity,
                       height: Responsive.value<double>(
                           context, mobile: 230, tablet: 300),
-                      child: _BeritaImage(imageUrl: berita.imageUrl),
+                      child: SmartImage(imageUrl: berita.imageUrl),
                     ),
                     Positioned(
                       top: 12,
@@ -172,51 +171,6 @@ class BeritaDetailPage extends StatelessWidget {
   }
 }
 
-// ── Gambar hero: handle base64 & network URL ──────────────────────────────────
-
-class _BeritaImage extends StatelessWidget {
-  const _BeritaImage({required this.imageUrl});
-  final String imageUrl;
-
-  static Widget _placeholder() => Container(
-        color: Colors.grey.shade200,
-        child: const Center(
-          child: Icon(Icons.image_outlined, color: Colors.grey, size: 48),
-        ),
-      );
-
-  @override
-  Widget build(BuildContext context) {
-    if (imageUrl.isEmpty) return _placeholder();
-
-    if (imageUrl.startsWith('data:')) {
-      try {
-        final Uint8List bytes = base64Decode(imageUrl.split(',').last);
-        return Image.memory(bytes,
-            fit: BoxFit.cover,
-            width: double.infinity,
-            errorBuilder: (_, __, ___) => _placeholder());
-      } catch (_) {
-        return _placeholder();
-      }
-    }
-
-    return Image.network(
-      imageUrl,
-      fit: BoxFit.cover,
-      width: double.infinity,
-      errorBuilder: (_, __, ___) => _placeholder(),
-      loadingBuilder: (_, child, progress) {
-        if (progress == null) return child;
-        return Container(
-          color: Colors.grey.shade100,
-          child: const Center(
-              child: CircularProgressIndicator(strokeWidth: 2)),
-        );
-      },
-    );
-  }
-}
 
 // ── Parser konten artikel ─────────────────────────────────────────────────────
 

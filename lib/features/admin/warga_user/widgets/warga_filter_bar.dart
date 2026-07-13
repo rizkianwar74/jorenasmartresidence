@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../models/warga_model.dart';
 
 class WargaFilterBar extends StatelessWidget {
   const WargaFilterBar({
@@ -31,6 +32,11 @@ class WargaFilterBar extends StatelessWidget {
             spacing: 8,
             children: options.map((blok) {
               final isActive = blok == selected;
+              // Chip "SATPAM" pakai nilai sentinel (kSatpamFilterValue),
+              // terpisah dari nilai blok asli — lihat catatan di
+              // warga_model.dart soal kenapa tidak boleh disamakan dengan
+              // blok kosong.
+              final label = blok == kSatpamFilterValue ? 'SATPAM' : blok;
               return GestureDetector(
                 onTap: () => onSelect(blok),
                 child: AnimatedContainer(
@@ -47,7 +53,7 @@ class WargaFilterBar extends StatelessWidget {
                     ),
                   ),
                   child: Text(
-                    blok,
+                    label,
                     style: GoogleFonts.inter(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,

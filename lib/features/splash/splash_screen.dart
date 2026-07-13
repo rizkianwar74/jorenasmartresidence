@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/router/app_router.dart';
-import '../auth/auth_repository.dart';
+import '../auth/data/auth_repository.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -84,6 +84,12 @@ class _SplashScreenState extends State<SplashScreen>
         // Sesi tidak ada/expired → ke login
         sessionRestored ? AppRouter.home : AppRouter.login,
       );
+    }).catchError((_) {
+      // Fallback: jika ada error tak terduga di luar try-catch,
+      // pastikan user tidak stuck di splash — arahkan ke login.
+      if (!mounted) return;
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      Navigator.pushReplacementNamed(context, AppRouter.login);
     });
   }
 
@@ -115,7 +121,7 @@ class _SplashScreenState extends State<SplashScreen>
                           child: ScaleTransition(
                             scale: _scaleAnim,
                             child: Image.asset(
-                              'assets/images/jorena_logo.jpg',
+                              'assets/images/jorena_logo.png',
                               width: 220,
                             ),
                           ),
@@ -178,8 +184,9 @@ class _SplashScreenState extends State<SplashScreen>
                           'SMART RESIDENCE V1.0.0',
                           style: GoogleFonts.inter(
                             fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 1.5,
                             color: const Color(0xFF94A3B8),
-                            letterSpacing: 0.8,
                           ),
                         ),
                       ],

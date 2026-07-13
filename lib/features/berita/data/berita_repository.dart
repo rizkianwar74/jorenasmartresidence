@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../admin/models/berita_doc.dart';
+import '../models/berita_doc.dart';
 
 /// Akses data berita acara untuk sisi pembaca (warga).
 ///

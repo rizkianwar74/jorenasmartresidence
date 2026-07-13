@@ -7,6 +7,7 @@ class AdminWargaModel {
     required this.nomorUnit,
     required this.nomorHp,
     this.komunitasRole,
+    this.role = 'user',
   });
 
   final String uid;
@@ -16,6 +17,8 @@ class AdminWargaModel {
   final String nomorUnit;
   final String nomorHp;
   final String? komunitasRole;
+  /// Role sistem: 'user' | 'satpam' | 'admin'
+  final String role;
 
   String get unitLabel => '$blok - No. $nomorUnit';
 
@@ -37,9 +40,19 @@ class AdminWargaModel {
       nomorUnit     : data['nomorUnit']      as String? ?? '-',
       nomorHp       : data['nomorHp']        as String? ?? '-',
       komunitasRole : data['komunitasRole']  as String?,
+      role          : data['role']           as String? ?? 'user',
     );
   }
 }
+
+/// Nilai sentinel untuk chip filter "SATPAM" di WargaFilterBar.
+///
+/// Sengaja BUKAN string kosong (''): satpam bisa saja punya blok/nomorUnit
+/// asli juga (mis. ditugaskan tinggal di salah satu unit), jadi filter
+/// "SATPAM" harus murni berdasarkan `role == 'satpam'`, terpisah total dari
+/// filter blok — supaya satpam yang punya blok tetap ikut ke-filter saat
+/// chip "SATPAM" dipilih, bukan cuma yang bloknya kosong.
+const String kSatpamFilterValue = '__satpam_filter__';
 
 const List<String> jabatanOptions = [
   '',
@@ -48,3 +61,7 @@ const List<String> jabatanOptions = [
   'KETUA STM',
   'WAKIL KETUA STM',
 ];
+
+/// Opsi role sistem yang bisa di-set admin dari dalam app.
+/// Role 'admin' tidak termasuk — hanya bisa diset via Firebase Console.
+const List<String> roleOptions = ['user', 'satpam'];

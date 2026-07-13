@@ -7,7 +7,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/data/sos_repository.dart';
 import 'data/security_repository.dart';
 import 'bantuan/bantuan_satpam_page.dart';
-import 'sos_status_page.dart';
+import 'sos/sos_status_page.dart';
 import 'widgets/sos_button.dart';
 
 class SecurityPage extends StatefulWidget {

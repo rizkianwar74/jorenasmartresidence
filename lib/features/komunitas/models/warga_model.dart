@@ -1,5 +1,5 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
+import '../../../shared/widgets/smart_image.dart';
 
 class WargaModel {
   const WargaModel({
@@ -31,19 +31,7 @@ class WargaModel {
   /// biasa. NetworkImage TIDAK bisa decode data URI base64, makanya foto
   /// profil warga sebelumnya tidak pernah muncul di halaman Komunitas
   /// (selalu fallback ke inisial nama).
-  ImageProvider? get avatarImageProvider {
-    final url = photoUrl;
-    if (url == null || url.isEmpty) return null;
-    if (url.startsWith('data:image')) {
-      try {
-        final base64Str = url.split(',').last;
-        return MemoryImage(base64Decode(base64Str));
-      } catch (_) {
-        return null;
-      }
-    }
-    return NetworkImage(url);
-  }
+  ImageProvider? get avatarImageProvider => SmartImage.provider(photoUrl);
 
   /// Format nomor WA: 08xx → 628xx
   String get waNumber {

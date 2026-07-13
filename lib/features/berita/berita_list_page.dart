@@ -1,9 +1,9 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/app_colors.dart';
+import '../../shared/widgets/smart_image.dart';
 import '../../core/utils/responsive_helper.dart';
-import '../admin/models/berita_doc.dart';
+import 'models/berita_doc.dart';
 import 'data/berita_repository.dart';
 import 'berita_detail_page.dart';
 
@@ -291,7 +291,7 @@ class _BeritaCard extends StatelessWidget {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    _CardImage(imageUrl: berita.imageUrl),
+                    SmartImage(imageUrl: berita.imageUrl),
                     Positioned(
                       top: 12,
                       left: 12,
@@ -379,53 +379,3 @@ class _BeritaCard extends StatelessWidget {
   }
 }
 
-// ── Gambar kartu: handle base64 & network URL ─────────────────────────────────
-
-class _CardImage extends StatelessWidget {
-  const _CardImage({required this.imageUrl});
-  final String imageUrl;
-
-  @override
-  Widget build(BuildContext context) {
-    if (imageUrl.isEmpty) {
-      return Container(
-        color: Colors.grey.shade200,
-        child: const Center(
-          child: Icon(Icons.image_outlined, color: Colors.grey, size: 32),
-        ),
-      );
-    }
-
-    if (imageUrl.startsWith('data:')) {
-      try {
-        final bytes = base64Decode(imageUrl.split(',').last);
-        return Image.memory(bytes,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Container(
-                color: Colors.grey.shade200,
-                child: const Icon(Icons.broken_image_outlined,
-                    color: Colors.grey, size: 32)));
-      } catch (_) {
-        return Container(color: Colors.grey.shade200);
-      }
-    }
-
-    return Image.network(
-      imageUrl,
-      fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => Container(
-        color: Colors.grey.shade200,
-        child: const Icon(Icons.broken_image_outlined,
-            color: Colors.grey, size: 32),
-      ),
-      loadingBuilder: (_, child, progress) {
-        if (progress == null) return child;
-        return Container(
-          color: Colors.grey.shade100,
-          child:
-              const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-        );
-      },
-    );
-  }
-}

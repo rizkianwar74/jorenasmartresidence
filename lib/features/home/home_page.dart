@@ -6,8 +6,8 @@ import '../../core/theme/app_colors.dart';
 import '../../core/data/bantuan_repository.dart';
 import '../../shared/widgets/bottom_nav_bar.dart';
 import '../../core/router/app_router.dart';
-import '../auth/auth_repository.dart';
-import '../admin/models/berita_doc.dart';
+import '../auth/data/auth_repository.dart';
+import '../berita/models/berita_doc.dart';
 import '../berita/data/berita_repository.dart';
 import 'data/home_repository.dart';
 import '../berita/berita_detail_page.dart';
@@ -21,6 +21,7 @@ import 'widgets/unit_status_card.dart';
 import 'models/feed_item.dart';
 import 'widgets/active_bantuan_card.dart';
 import 'widgets/home_activity_section.dart';
+import '../security/bantuan/bantuan_status_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -280,41 +281,13 @@ class _HomePageState extends State<HomePage> {
     return 'Selamat Malam';
   }
 
-  Future<void> _cancelBantuan(String requestId) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: Text('Batalkan Laporan?',
-            style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
-        content: Text(
-          'Apakah Anda yakin ingin membatalkan laporan ini?',
-          style: GoogleFonts.inter(fontSize: 13, color: AppColors.textGrey),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child:
-                Text('Tidak', style: GoogleFonts.inter(color: AppColors.textGrey)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red.shade600,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8)),
-            ),
-            child: Text('Ya, Batalkan',
-                style: GoogleFonts.inter(color: Colors.white)),
-          ),
-        ],
+  void _openBantuanStatus(String requestId) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BantuanStatusPage(requestId: requestId),
       ),
     );
-    if (confirm == true) {
-      await BantuanRepository.cancelRequest(requestId);
-    }
   }
 
   @override
@@ -360,10 +333,12 @@ class _HomePageState extends State<HomePage> {
                          if (_activeBantuan != null)
                            Padding(
                              padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
-                             child: ActiveBantuanCard(
-                               request: _activeBantuan!,
-                               onCancel: () =>
-                                   _cancelBantuan(_activeBantuan!.id),
+                             child: GestureDetector(
+                               onTap: () =>
+                                   _openBantuanStatus(_activeBantuan!.id),
+                               child: ActiveBantuanCard(
+                                 request: _activeBantuan!,
+                               ),
                              ),
                            ),
 
