@@ -28,7 +28,14 @@ class SosNotificationService {
   static Future<void> init() async {
     if (kIsWeb || _initialized) return;
 
-    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    // Catatan: pakai '@mipmap/launcher_icon' (bukan '@mipmap/ic_launcher').
+    // Resource 'launcher_icon' dihasilkan oleh flutter_launcher_icons dan
+    // dipakai sebagai android:icon di AndroidManifest.xml, jadi dijamin ada
+    // di APK release. 'ic_launcher' adalah nama default template Flutter —
+    // di build release resource ini bisa tidak ditemukan (invalid_icon),
+    // yang menyebabkan exception tak tertangani di main() sebelum runApp()
+    // sempat dipanggil, sehingga app tampak "stuck" selamanya di splash screen.
+    const androidInit = AndroidInitializationSettings('@mipmap/launcher_icon');
     const initSettings = InitializationSettings(android: androidInit);
 
     await _plugin.initialize(initSettings);
@@ -66,8 +73,10 @@ class SosNotificationService {
     await androidPlugin?.createNotificationChannel(sosChannel);
     await androidPlugin?.createNotificationChannel(callChannel);
 
-    // Minta permission notifikasi (Android 13+)
-    await androidPlugin?.requestNotificationsPermission();
+    // Minta permission notifikasi (Android 13+).
+    // JANGAN di-await: dialog izin bisa menggantung di sebagian device dan
+    // membuat main() tidak pernah selesai (app stuck di splash). Fire-and-forget.
+    androidPlugin?.requestNotificationsPermission();
 
     _initialized = true;
   }
@@ -90,7 +99,7 @@ class SosNotificationService {
       ongoing: true, // tidak bisa di-dismiss sebelum ditangani
       autoCancel: false,
       color: const Color(0xFFD32F2F),
-      largeIcon: const DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
+      largeIcon: const DrawableResourceAndroidBitmap('@mipmap/launcher_icon'),
       styleInformation: BigTextStyleInformation(
         'Warga membutuhkan bantuan segera di Blok ${alert.blok} Unit ${alert.nomorUnit}',
         summaryText: 'Tap untuk merespons',
@@ -118,7 +127,7 @@ class SosNotificationService {
       enableVibration: false,
       autoCancel: true,
       color: const Color(0xFF1E3A8A),
-      largeIcon: const DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
+      largeIcon: const DrawableResourceAndroidBitmap('@mipmap/launcher_icon'),
       styleInformation: BigTextStyleInformation(
         'Warga meminta bantuan di Blok ${alert.blok} Unit ${alert.nomorUnit}',
         summaryText: 'Tap untuk merespons',

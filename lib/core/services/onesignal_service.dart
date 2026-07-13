@@ -38,12 +38,18 @@ class OneSignalService {
 
     _setupPushSubscriptionObserver();
 
-    // Minta izin notifikasi (WAJIB di Android 13+/iOS agar push tampil &
-    // device berstatus opted-in / muncul di Subscriptions OneSignal).
-    final granted = await OneSignal.Notifications.requestPermission(true);
-    debugPrint('[OneSignal] permission granted=$granted '
-        'subId=${OneSignal.User.pushSubscription.id} '
-        'optedIn=${OneSignal.User.pushSubscription.optedIn}');
+    // Minta izin notifikasi secara TIDAK MEMBLOKIR (fire-and-forget).
+    // Sebelumnya: await requestPermission(true) — bisa hang di beberapa device
+    // Android karena dialog izin tidak muncul atau sistem lambat merespons,
+    // menyebabkan main() tidak pernah selesai → app stuck di splash.
+    // Solusi: jalankan tanpa await agar startup tidak terhambat.
+    OneSignal.Notifications.requestPermission(true).then((granted) {
+      debugPrint('[OneSignal] permission granted=$granted '
+          'subId=${OneSignal.User.pushSubscription.id} '
+          'optedIn=${OneSignal.User.pushSubscription.optedIn}');
+    }).catchError((e) {
+      debugPrint('[OneSignal] requestPermission error: $e');
+    });
 
     // Registrasi FCM bersifat asinkron — cek ulang setelah beberapa detik.
     // token KOSONG = FCM masih gagal; token ADA = device siap menerima push.
