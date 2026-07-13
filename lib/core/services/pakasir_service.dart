@@ -1,7 +1,4 @@
-import 'dart:convert';
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:http/http.dart' as http;
 
 /// Wrapper untuk Pakasir payment gateway.
 ///
@@ -9,16 +6,25 @@ import 'package:http/http.dart' as http;
 ///
 /// Flow:
 ///   1. Buka URL [buildPaymentUrl] di browser eksternal (url_launcher).
-///   2. Poll [getTransactionStatus] setiap beberapa detik.
-///   3. Kalau [isPaid] → tandai tagihan lunas di Firestore.
+///   2. Pembayaran diverifikasi oleh server webhook (server/pakasir-webhook/),
+///      BUKAN oleh app ini — lihat docs/payment_webhook_fix_prompt.md.
+///
+/// Catatan: dulu class ini juga punya `getTransactionStatus()`/`isPaid()`
+/// yang memanggil API transactiondetail Pakasir LANGSUNG dari client pakai
+/// PAKASIR_API_KEY yang ikut ter-bundle di APK. Itu dihapus karena api_key
+/// tidak boleh ada di client — klien tidak boleh punya wewenang memverifikasi
+/// (dan berpotensi memalsukan) status pembayarannya sendiri. Verifikasi kini
+/// sepenuhnya jadi tugas server webhook; app Flutter cukup listen Firestore
+/// (lihat PaymentRepository.watchTagihanByIds) untuk tahu kapan tagihan
+/// sudah ditandai lunas oleh server.
 class PakasirService {
   PakasirService._();
 
-  static String get _slug   => dotenv.maybeGet('PAKASIR_SLUG')    ?? '';
-  static String get _apiKey => dotenv.maybeGet('PAKASIR_API_KEY') ?? '';
+  // PAKASIR_SLUG aman ada di client — cuma dipakai membentuk URL pembayaran,
+  // bukan kredensial. PAKASIR_API_KEY SENGAJA tidak ada lagi di sini/.env.
+  static String get _slug => dotenv.maybeGet('PAKASIR_SLUG') ?? '';
 
   static const String _payBase = 'https://app.pakasir.com/pay';
-  static const String _apiBase = 'https://app.pakasir.com/api';
 
   // ── URL pembayaran ──────────────────────────────────────────────────────────
   /// Buat URL halaman pembayaran yang dibuka di browser eksternal.
@@ -31,46 +37,4 @@ class PakasirService {
     required int    amount,
   }) =>
       '$_payBase/$_slug/$amount?order_id=$orderId&qris_only=1';
-
-  // ── Cek status transaksi ───────────────────────────────────────────────────
-  /// Ambil status transaksi via Pakasir Transaction Detail API.
-  ///
-  /// Return: `'completed'`, `'pending'`, atau `null` (belum ada / error).
-  static Future<String?> getTransactionStatus({
-    required String orderId,
-    required int    amount,
-  }) async {
-    if (_slug.isEmpty || _apiKey.isEmpty) {
-      debugPrint(
-          '[Pakasir] PAKASIR_SLUG / PAKASIR_API_KEY belum diisi di .env');
-      return null;
-    }
-    try {
-      final uri = Uri.parse('$_apiBase/transactiondetail').replace(
-        queryParameters: {
-          'project'  : _slug,
-          'amount'   : amount.toString(),
-          'order_id' : orderId,
-          'api_key'  : _apiKey,
-        },
-      );
-      final res = await http.get(
-        uri,
-        headers: {'Accept': 'application/json'},
-      );
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body) as Map<String, dynamic>;
-        final tx   = data['transaction'] as Map<String, dynamic>?;
-        return tx?['status'] as String?;
-      }
-      debugPrint('[Pakasir] getStatus ${res.statusCode}: ${res.body}');
-      return null;
-    } catch (e) {
-      debugPrint('[Pakasir] getStatus error: $e');
-      return null;
-    }
-  }
-
-  // ── Helper status ─────────────────────────────────────────────────────────
-  static bool isPaid(String? status) => status == 'completed';
 }

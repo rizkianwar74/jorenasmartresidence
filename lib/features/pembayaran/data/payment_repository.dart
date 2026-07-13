@@ -41,6 +41,28 @@ class PaymentRepository {
     return TagihanModel.fromMap(doc.id, doc.data()!);
   }
 
+  /// Stream beberapa tagihan sekaligus by id — dipakai halaman pembayaran
+  /// (PakasirPaymentPage) untuk MENUNGGU status berubah jadi lunas.
+  ///
+  /// Status "lunas" kini ditulis oleh server webhook (lihat
+  /// server/pakasir-webhook/), BUKAN oleh client — halaman pembayaran cukup
+  /// listen stream ini dan menunggu semua tagihan yang dibayar berubah
+  /// status, alih-alih memutuskan sendiri lewat polling ke API Pakasir.
+  ///
+  /// Catatan: `whereIn` Firestore dibatasi maksimal 30 nilai — jauh lebih
+  /// dari cukup untuk jumlah bulan tunggakan yang realistis dalam satu
+  /// transaksi pembayaran.
+  static Stream<List<TagihanModel>> watchTagihanByIds(List<String> ids) {
+    if (ids.isEmpty) return Stream.value(const []);
+    return _db
+        .collection(_collection)
+        .where(FieldPath.documentId, whereIn: ids)
+        .snapshots()
+        .map((snap) => snap.docs
+            .map((d) => TagihanModel.fromMap(d.id, d.data()))
+            .toList());
+  }
+
   /// Update status pembayaran satu tagihan setelah transaksi Midtrans.
   static Future<void> updatePaymentStatus({
     required String tagihanId,

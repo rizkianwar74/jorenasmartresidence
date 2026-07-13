@@ -7,7 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/services/pakasir_service.dart';
 import '../../core/services/onesignal_service.dart';
-import '../auth/auth_repository.dart';
+import '../auth/data/auth_repository.dart';
 import 'models/tagihan_model.dart';
 import 'data/payment_repository.dart';
 import 'payment_status_page.dart';
@@ -17,9 +17,17 @@ import 'payment_status_page.dart';
 /// Flow:
 ///   1. Generate orderId → simpan ke Firestore (setOrderIdForMany).
 ///   2. Buka URL Pakasir di browser eksternal (url_launcher).
-///   3. Tampilkan layar "Menunggu Pembayaran" + poll Pakasir API tiap 4 detik.
-///   4. Kalau status == 'completed' → markManyAsLunas → kirim push notification
-///      via OneSignal → navigasi ke [PaymentStatusPage].
+///   3. Tampilkan layar "Menunggu Pembayaran" + listen Firestore (BUKAN
+///      polling API Pakasir) untuk tahu kapan tagihan berubah status.
+///   4. Status "lunas" ditulis oleh server webhook (server/pakasir-webhook/),
+///      yang memverifikasi ulang pembayaran ke Pakasir sebelum menulis.
+///      Begitu Firestore menunjukkan semua tagihan sudah lunas → kirim push
+///      notification via OneSignal → navigasi ke [PaymentStatusPage].
+///
+///   Client TIDAK LAGI berwenang menandai tagihan lunas sendiri (dulu lewat
+///   PaymentRepository.markManyAsLunas dipanggil langsung dari sini) — itu
+///   sekarang murni tugas server, supaya klien tidak bisa memicu status
+///   lunas tanpa benar-benar membayar. Lihat docs/payment_webhook_fix_prompt.md.
 class PakasirPaymentPage extends StatefulWidget {
   const PakasirPaymentPage({super.key, required this.tagihanList});
 
@@ -35,7 +43,7 @@ class _PakasirPaymentPageState extends State<PakasirPaymentPage> {
   bool   _resolved     = false;
   bool   _initializing = true;
   String? _orderId;
-  Timer?  _pollTimer;
+  StreamSubscription<List<TagihanModel>>? _tagihanSub;
 
   TagihanModel  get _tertua      => widget.tagihanList.first;
   TagihanModel  get _terbaru     => widget.tagihanList.last;
@@ -55,7 +63,7 @@ class _PakasirPaymentPageState extends State<PakasirPaymentPage> {
 
   @override
   void dispose() {
-    _pollTimer?.cancel();
+    _tagihanSub?.cancel();
     super.dispose();
   }
 
@@ -64,7 +72,9 @@ class _PakasirPaymentPageState extends State<PakasirPaymentPage> {
     final orderId = 'IUR-${DateTime.now().millisecondsSinceEpoch}';
     _orderId = orderId;
 
-    // Simpan orderId ke Firestore — tidak fatal kalau gagal.
+    // Simpan orderId ke Firestore — tidak fatal kalau gagal. orderId inilah
+    // yang dipakai server webhook untuk mencari tagihan mana yang harus
+    // ditandai lunas begitu Pakasir mengonfirmasi pembayaran.
     try {
       await PaymentRepository.setOrderIdForMany(
         tagihanIds: _ids,
@@ -78,8 +88,9 @@ class _PakasirPaymentPageState extends State<PakasirPaymentPage> {
     // Buka halaman pembayaran Pakasir di browser.
     await _openPaymentUrl();
 
-    // Mulai polling status.
-    _startPolling();
+    // Dengarkan Firestore — bukan polling ke Pakasir. Server webhook yang
+    // akan menulis status lunas setelah verifikasi.
+    _listenForPaymentConfirmation();
   }
 
   // ── Buka URL ───────────────────────────────────────────────────────────────
@@ -96,20 +107,18 @@ class _PakasirPaymentPageState extends State<PakasirPaymentPage> {
     } catch (_) {}
   }
 
-  // ── Polling ────────────────────────────────────────────────────────────────
-  void _startPolling() {
-    _pollTimer = Timer.periodic(const Duration(seconds: 4), (_) async {
-      if (_resolved || _orderId == null) {
-        _pollTimer?.cancel();
-        return;
-      }
-      final status = await PakasirService.getTransactionStatus(
-        orderId: _orderId!,
-        amount:  _totalJumlah,
-      );
-      if (PakasirService.isPaid(status)) {
-        await _handleSuccess();
-      }
+  // ── Tunggu konfirmasi via Firestore ────────────────────────────────────────
+  // Server webhook (server/pakasir-webhook/) yang menulis status ini setelah
+  // memverifikasi ulang pembayaran ke Pakasir. Begitu SEMUA tagihan yang
+  // sedang dibayar berstatus lunas, anggap pembayaran selesai.
+  void _listenForPaymentConfirmation() {
+    _tagihanSub = PaymentRepository.watchTagihanByIds(_ids).listen((list) {
+      if (_resolved) return;
+      // Pastikan SEMUA tagihan yang dibayar sudah kembali (bukan snapshot
+      // parsial) dan semuanya sudah lunas sebelum dianggap selesai.
+      final semuaLunas = list.length == _ids.length &&
+          list.every((t) => t.status == StatusTagihan.lunas);
+      if (semuaLunas) _handleSuccess();
     });
   }
 
@@ -117,16 +126,7 @@ class _PakasirPaymentPageState extends State<PakasirPaymentPage> {
   Future<void> _handleSuccess() async {
     if (_resolved) return;
     _resolved = true;
-    _pollTimer?.cancel();
-
-    // Tandai semua tagihan lunas di Firestore.
-    try {
-      await PaymentRepository.markManyAsLunas(
-        tagihanIds: _ids,
-        metodeBayar: 'QRIS',
-        orderId:     _orderId,
-      );
-    } catch (_) {}
+    _tagihanSub?.cancel();
 
     // Kirim push notification ke user.
     final uid = AuthRepository.currentUid;
