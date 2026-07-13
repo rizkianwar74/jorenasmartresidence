@@ -7,11 +7,9 @@ class ActiveBantuanCard extends StatelessWidget {
   const ActiveBantuanCard({
     super.key,
     required this.request,
-    required this.onCancel,
   });
 
   final BantuanRequest request;
-  final VoidCallback onCancel;
 
   Color get _statusColor {
     switch (request.status) {
@@ -72,19 +70,12 @@ class ActiveBantuanCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                // Tombol batal hanya saat PENDING
-                if (request.status == BantuanStatus.pending)
-                  GestureDetector(
-                    onTap: onCancel,
-                    child: Text(
-                      'Batalkan',
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.red.shade600,
-                      ),
-                    ),
-                  ),
+                // Hint tap untuk buka detail
+                Icon(
+                  Icons.chevron_right_rounded,
+                  size: 18,
+                  color: _statusColor.withValues(alpha: 0.6),
+                ),
               ],
             ),
           ),

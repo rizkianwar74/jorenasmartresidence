@@ -1,9 +1,8 @@
-import 'dart:convert';
-import 'dart:typed_data';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../shared/widgets/smart_image.dart';
 
 class NewsCard extends StatelessWidget {
   const NewsCard({
@@ -50,7 +49,7 @@ class NewsCard extends StatelessWidget {
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
-                    child: _BeritaImage(
+                    child: SmartImage(
                       imageUrl: imageUrl,
                       width: double.infinity,
                       height: double.infinity,
@@ -129,102 +128,3 @@ class NewsCard extends StatelessWidget {
   }
 }
 
-// ── Helper: tampilkan gambar dari URL biasa atau base64 data URL ──────────────
-//
-// Dibuat StatefulWidget supaya base64 hanya di-decode SEKALI (di initState),
-// bukan setiap kali parent rebuild. Tanpa ini gambar blink tiap setState
-// di home_page (feed stream, bantuan listener, dll.).
-// gaplessPlayback: true mencegah blank frame saat widget di-rebuild.
-
-class _BeritaImage extends StatefulWidget {
-  const _BeritaImage({
-    required this.imageUrl,
-    this.width,
-    this.height,
-    this.fit = BoxFit.cover,
-  });
-
-  final String imageUrl;
-  final double? width;
-  final double? height;
-  final BoxFit fit;
-
-  @override
-  State<_BeritaImage> createState() => _BeritaImageState();
-}
-
-class _BeritaImageState extends State<_BeritaImage> {
-  Uint8List? _bytes;
-  bool _isBase64 = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _decode(widget.imageUrl);
-  }
-
-  @override
-  void didUpdateWidget(_BeritaImage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.imageUrl != widget.imageUrl) {
-      _decode(widget.imageUrl);
-    }
-  }
-
-  void _decode(String url) {
-    if (url.startsWith('data:')) {
-      _isBase64 = true;
-      try {
-        _bytes = base64Decode(url.split(',').last);
-      } catch (_) {
-        _bytes = null;
-      }
-    } else {
-      _isBase64 = false;
-      _bytes = null;
-    }
-  }
-
-  static Widget _placeholder() => Container(
-        color: Colors.grey.shade200,
-        child: const Center(
-          child: Icon(Icons.image_outlined, color: Colors.grey, size: 36),
-        ),
-      );
-
-  @override
-  Widget build(BuildContext context) {
-    if (widget.imageUrl.isEmpty) return _placeholder();
-
-    // Base64 — bytes sudah di-decode saat initState, tidak decode ulang
-    if (_isBase64) {
-      if (_bytes == null) return _placeholder();
-      return Image.memory(
-        _bytes!,
-        width: widget.width,
-        height: widget.height,
-        fit: widget.fit,
-        gaplessPlayback: true, // tidak blank saat parent rebuild
-        errorBuilder: (_, __, ___) => _placeholder(),
-      );
-    }
-
-    // URL biasa (https://)
-    return Image.network(
-      widget.imageUrl,
-      width: widget.width,
-      height: widget.height,
-      fit: widget.fit,
-      gaplessPlayback: true, // tidak blank saat parent rebuild
-      errorBuilder: (_, __, ___) => _placeholder(),
-      loadingBuilder: (_, child, progress) {
-        if (progress == null) return child;
-        return Container(
-          color: Colors.grey.shade100,
-          child: const Center(
-              child: CircularProgressIndicator(strokeWidth: 2)),
-        );
-      },
-    );
-  }
-}
