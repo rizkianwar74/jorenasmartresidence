@@ -41,17 +41,42 @@ class _AdminSecurityPageState extends State<AdminSecurityPage> {
     return DateTime(now.year, now.month, now.day);
   }
 
+  // Filter tambahan di sisi client — jaga-jaga kalau ada dokumen lama yang
+  // lolos dari query Firestore (mis. createdAt tidak konsisten/kosong pada
+  // sebagian data lama). Query `sejakStream` di atas tetap dipakai untuk
+  // membatasi data yang di-fetch, tapi keputusan "termasuk hari ini atau
+  // tidak" akhirnya divalidasi ulang di sini berdasarkan tanggal asli.
+  bool _isToday(dynamic rawCreatedAt) {
+    if (rawCreatedAt is! Timestamp) return false;
+    final d = rawCreatedAt.toDate();
+    final now = DateTime.now();
+    return d.year == now.year && d.month == now.month && d.day == now.day;
+  }
+
   @override
   void initState() {
     super.initState();
     final start = _startOfToday;
 
     _sosSub = _repo.sosSejakStream(start).listen((snap) {
-      if (mounted) setState(() { _sosDocs = snap.docs; _loading = false; });
+      if (mounted) {
+        setState(() {
+          _sosDocs = snap.docs
+              .where((d) => _isToday(d.data()['createdAt']))
+              .toList();
+          _loading = false;
+        });
+      }
     });
 
     _bantuanSub = _repo.bantuanSejakStream(start).listen((snap) {
-      if (mounted) setState(() => _bantuanDocs = snap.docs);
+      if (mounted) {
+        setState(() {
+          _bantuanDocs = snap.docs
+              .where((d) => _isToday(d.data()['createdAt']))
+              .toList();
+        });
+      }
     });
 
     _satpamSub = _repo.satpamStream().listen((snap) {

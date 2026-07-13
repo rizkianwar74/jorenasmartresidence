@@ -7,20 +7,36 @@ import '../../../../core/services/onesignal_service.dart';
 import 'reports_shared_widgets.dart';
 import 'reports_dialogs.dart';
 
-class DetailPanel extends StatefulWidget {
-  const DetailPanel({
-    super.key,
-    required this.report,
-    required this.onAssigned,
-  });
-  final KeluhanItem? report;
-  final VoidCallback onAssigned;
+// ─────────────────────────────────────────────────────────────────────────────
+// Modal detail laporan — dibuka saat sebuah baris tabel diklik.
+//
+// Kontennya "live": memakai StreamBuilder yang sama dengan sumber data tabel
+// (KeluhanRepository.watchAllKeluhan), jadi begitu status/penugasan berubah
+// di Firestore, modal ini otomatis memperbarui tampilannya sendiri tanpa
+// perlu ditutup dulu. Admin menutup modal secara manual lewat tombol X atau
+// tap di luar area modal.
+// ─────────────────────────────────────────────────────────────────────────────
 
-  @override
-  State<DetailPanel> createState() => _DetailPanelState();
+Future<void> showReportDetailDialog(
+  BuildContext context, {
+  required KeluhanItem initialReport,
+}) {
+  return showDialog(
+    context: context,
+    barrierColor: Colors.black.withValues(alpha: 0.4),
+    builder: (_) => _ReportDetailDialog(initialReport: initialReport),
+  );
 }
 
-class _DetailPanelState extends State<DetailPanel> {
+class _ReportDetailDialog extends StatefulWidget {
+  const _ReportDetailDialog({required this.initialReport});
+  final KeluhanItem initialReport;
+
+  @override
+  State<_ReportDetailDialog> createState() => _ReportDetailDialogState();
+}
+
+class _ReportDetailDialogState extends State<_ReportDetailDialog> {
   bool _assigning = false;
 
   Future<void> _showAssignDialog(KeluhanItem item) async {
@@ -94,6 +110,7 @@ class _DetailPanelState extends State<DetailPanel> {
               onPressed: chosen == null ? null : () => Navigator.pop(ctx, chosen),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary, elevation: 0,
+                minimumSize: Size.zero,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
               child: Text('Tugaskan',
@@ -118,7 +135,6 @@ class _DetailPanelState extends State<DetailPanel> {
         );
         if (mounted) {
           setState(() => _assigning = false);
-          widget.onAssigned();
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text('Laporan ditugaskan ke ${result.nama}',
                 style: GoogleFonts.inter(fontSize: 13)),
@@ -133,7 +149,6 @@ class _DetailPanelState extends State<DetailPanel> {
 
   Future<void> _updateStatus(KeluhanItem item, StatusKeluhan s) async {
     await KeluhanRepository.updateStatus(keluhanId: item.id, status: s);
-    if (mounted) widget.onAssigned();
     // Notifikasi ke warga pemilik keluhan (fire-and-forget).
     OneSignalService.instance.sendKeluhanUpdate(
       userId       : item.uid,
@@ -153,154 +168,202 @@ class _DetailPanelState extends State<DetailPanel> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      constraints: const BoxConstraints(minHeight: 260),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: widget.report == null ? _emptyState() : _detailState(widget.report!),
-    );
-  }
-
-  Widget _emptyState() {
-    return Padding(
-      padding: const EdgeInsets.all(40),
-      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Container(
-          width: 72, height: 72,
-          decoration: BoxDecoration(color: Colors.grey.shade100, shape: BoxShape.circle),
-          child: Icon(Icons.description_outlined, size: 36, color: Colors.grey.shade400),
+    final screenSize = MediaQuery.of(context).size;
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 32),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 860,
+          maxHeight: screenSize.height * 0.85,
         ),
-        const SizedBox(height: 20),
-        Text('Pilih Laporan Untuk Detail',
-            style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.textDark)),
-        const SizedBox(height: 8),
-        Text('Klik salah satu baris untuk melihat detail\ndan menugaskan kepada satpam.',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.inter(fontSize: 13, color: AppColors.textGrey, height: 1.5)),
-      ]),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 32,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildHeader(),
+              Flexible(
+                child: StreamBuilder<List<KeluhanItem>>(
+                  stream: KeluhanRepository.watchAllKeluhan(),
+                  initialData: [widget.initialReport],
+                  builder: (context, snapshot) {
+                    final list = snapshot.data ?? const <KeluhanItem>[];
+                    KeluhanItem current = widget.initialReport;
+                    for (final it in list) {
+                      if (it.id == widget.initialReport.id) {
+                        current = it;
+                        break;
+                      }
+                    }
+                    return SingleChildScrollView(
+                      padding: const EdgeInsets.all(24),
+                      child: _detailBody(current),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
-  Widget _detailState(KeluhanItem r) {
-    final tgl = DateFormat('dd MMMM yyyy, HH:mm', 'id_ID').format(r.createdAt);
-    return Padding(
-      padding: const EdgeInsets.all(24),
+  Widget _buildHeader() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(24, 20, 16, 16),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
+      ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Kiri: info + action buttons ─────────────────────────────
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header
-                Row(children: [
-                  Expanded(child: Text(r.judul,
-                      style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.textDark))),
-                  const SizedBox(width: 12),
-                  StatusBadgeRow(r.status),
-                ]),
-                const SizedBox(height: 12),
-
-                // Info
-                _detailRow('Pelapor', '${r.namaWarga} — Blok ${r.blok} – Unit ${r.nomorUnit}'),
-                _detailRow('Kategori', r.kategori),
-                _detailRow('Tanggal', tgl),
-                if (r.assignedName != null)
-                  _detailRow('Ditugaskan ke', r.assignedName!, valueColor: AppColors.primary),
-
-                const SizedBox(height: 10),
-                Divider(color: Colors.grey.shade100),
-                const SizedBox(height: 10),
-
-                // Deskripsi
-                Text('Deskripsi', style: GoogleFonts.inter(
-                    fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textGrey)),
-                const SizedBox(height: 6),
-                Text(r.deskripsi, style: GoogleFonts.inter(
-                    fontSize: 13, color: AppColors.textDark, height: 1.6)),
-
-                // Admin note
-                if (r.adminNote != null && r.adminNote!.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
-                    ),
-                    child: Text(r.adminNote!,
-                        style: GoogleFonts.inter(fontSize: 13, color: AppColors.primary, height: 1.5)),
-                  ),
-                ],
-
-                const SizedBox(height: 20),
-
-                // Action buttons
-                if (_assigning)
-                  const CircularProgressIndicator(strokeWidth: 2)
-                else
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 8,
-                    children: [
-                      if (r.status == StatusKeluhan.menunggu ||
-                          r.status == StatusKeluhan.diproses)
-                        ElevatedButton.icon(
-                          onPressed: () => _showAssignDialog(r),
-                          icon: const Icon(Icons.person_add_outlined, size: 16, color: Colors.white),
-                          label: Text(
-                            r.assignedName == null ? 'Tugaskan Satpam' : 'Ganti Satpam',
-                            style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary, elevation: 0,
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          ),
-                        ),
-                      if (r.status == StatusKeluhan.diproses)
-                        ElevatedButton.icon(
-                          onPressed: () => _updateStatus(r, StatusKeluhan.selesai),
-                          icon: const Icon(Icons.check_circle_outline, size: 16, color: Colors.white),
-                          label: Text('Selesai',
-                              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white)),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF2E7D32), elevation: 0,
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          ),
-                        ),
-                      if (r.status == StatusKeluhan.menunggu)
-                        OutlinedButton.icon(
-                          onPressed: () => _updateStatus(r, StatusKeluhan.ditolak),
-                          icon: Icon(Icons.cancel_outlined, size: 16, color: Colors.red.shade400),
-                          label: Text('Tolak',
-                              style: GoogleFonts.inter(fontSize: 12, color: Colors.red.shade400)),
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(color: Colors.red.shade200),
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          ),
-                        ),
-                    ],
-                  ),
-              ],
-            ),
+            child: Text('Detail Laporan',
+                style: GoogleFonts.inter(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textDark)),
           ),
-
-          // ── Kanan: foto ──────────────────────────────────────────────
-          const SizedBox(width: 24),
-          SizedBox(
-            width: 260,
-            child: FotoPanel(fotoUrls: r.fotoUrls),
+          IconButton(
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.close, size: 20),
+            color: AppColors.textGrey,
+            splashRadius: 18,
           ),
         ],
       ),
+    );
+  }
+
+  Widget _detailBody(KeluhanItem r) {
+    final tgl = DateFormat('dd MMMM yyyy, HH:mm', 'id_ID').format(r.createdAt);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Kiri: info + action buttons ─────────────────────────────
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Row(children: [
+                Expanded(child: Text(r.judul,
+                    style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.textDark))),
+                const SizedBox(width: 12),
+                StatusBadgeRow(r.status),
+              ]),
+              const SizedBox(height: 12),
+
+              // Info
+              _detailRow('Pelapor', '${r.namaWarga} — Blok ${r.blok} – Unit ${r.nomorUnit}'),
+              _detailRow('Kategori', r.kategori),
+              _detailRow('Tanggal', tgl),
+              if (r.assignedName != null)
+                _detailRow('Ditugaskan ke', r.assignedName!, valueColor: AppColors.primary),
+
+              const SizedBox(height: 10),
+              Divider(color: Colors.grey.shade100),
+              const SizedBox(height: 10),
+
+              // Deskripsi
+              Text('Deskripsi', style: GoogleFonts.inter(
+                  fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textGrey)),
+              const SizedBox(height: 6),
+              Text(r.deskripsi, style: GoogleFonts.inter(
+                  fontSize: 13, color: AppColors.textDark, height: 1.6)),
+
+              // Admin note
+              if (r.adminNote != null && r.adminNote!.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
+                  ),
+                  child: Text(r.adminNote!,
+                      style: GoogleFonts.inter(fontSize: 13, color: AppColors.primary, height: 1.5)),
+                ),
+              ],
+
+              const SizedBox(height: 20),
+
+              // Action buttons
+              if (_assigning)
+                const CircularProgressIndicator(strokeWidth: 2)
+              else
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 8,
+                  children: [
+                    if (r.status == StatusKeluhan.menunggu ||
+                        r.status == StatusKeluhan.diproses)
+                      ElevatedButton.icon(
+                        onPressed: () => _showAssignDialog(r),
+                        icon: const Icon(Icons.person_add_outlined, size: 16, color: Colors.white),
+                        label: Text(
+                          r.assignedName == null ? 'Tugaskan Satpam' : 'Ganti Satpam',
+                          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary, elevation: 0,
+                          minimumSize: Size.zero,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                    if (r.status == StatusKeluhan.diproses)
+                      ElevatedButton.icon(
+                        onPressed: () => _updateStatus(r, StatusKeluhan.selesai),
+                        icon: const Icon(Icons.check_circle_outline, size: 16, color: Colors.white),
+                        label: Text('Selesai',
+                            style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2E7D32), elevation: 0,
+                          minimumSize: Size.zero,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                    if (r.status == StatusKeluhan.menunggu)
+                      OutlinedButton.icon(
+                        onPressed: () => _updateStatus(r, StatusKeluhan.ditolak),
+                        icon: Icon(Icons.cancel_outlined, size: 16, color: Colors.red.shade400),
+                        label: Text('Tolak',
+                            style: GoogleFonts.inter(fontSize: 12, color: Colors.red.shade400)),
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: Colors.red.shade200),
+                          minimumSize: Size.zero,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+
+        // ── Kanan: foto ──────────────────────────────────────────────
+        const SizedBox(width: 24),
+        SizedBox(
+          width: 260,
+          child: FotoPanel(fotoUrls: r.fotoUrls),
+        ),
+      ],
     );
   }
 

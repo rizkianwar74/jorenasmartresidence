@@ -10,9 +10,14 @@ class LogAktivitasSection extends StatelessWidget {
   final List<LogItem> items;
   final ValueChanged<LogItem> onTap;
 
+  // Tinggi tiap baris DIPAKSA sama persis (lihat SizedBox di LogRow) supaya
+  // tinggi area scroll bisa dihitung pasti: cukup untuk menampilkan 7 baris
+  // teratas, sisanya di-scroll di dalam area itu sendiri (bukan pagination).
+  static const double _rowHeight = 56;
+  static const int    _visibleRows = 7;
+
   @override
   Widget build(BuildContext context) {
-    final today = DateFormat('dd MMMM yyyy', 'id_ID').format(DateTime.now());
     return Container(
       decoration: BoxDecoration(
         color: Colors.white, borderRadius: BorderRadius.circular(12),
@@ -35,7 +40,6 @@ class LogAktivitasSection extends StatelessWidget {
                       fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
                 ),
               const Spacer(),
-              Text(today, style: GoogleFonts.inter(fontSize: 12, color: AppColors.textGrey)),
             ]),
           ),
           const SizedBox(height: 10),
@@ -43,6 +47,7 @@ class LogAktivitasSection extends StatelessWidget {
             color: const Color(0xFFF8FAFC),
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             child: const Row(children: [
+              SizedBox(width: 90, child: ColH('TANGGAL KEJADIAN')),
               SizedBox(width: 70, child: ColH('WAKTU')),
               SizedBox(width: 32),
               Expanded(flex: 2, child: ColH('KEJADIAN')),
@@ -61,8 +66,23 @@ class LogAktivitasSection extends StatelessWidget {
                     style: GoogleFonts.inter(fontSize: 13, color: AppColors.textGrey)),
               ])),
             )
+          else if (items.length <= _visibleRows)
+            // Item sedikit — tampil apa adanya, tidak perlu area scroll.
+            ...items.map((item) => LogRow(item: item, onTap: () => onTap(item)))
           else
-            ...items.map((item) => LogRow(item: item, onTap: () => onTap(item))),
+            // Lebih dari 7 item — batasi tinggi supaya cuma 7 baris teratas
+            // yang kelihatan, sisanya bisa dilihat dengan scroll di dalam
+            // area ini saja (halaman di luar tidak ikut memanjang).
+            SizedBox(
+              height: _rowHeight * _visibleRows,
+              child: Scrollbar(
+                child: ListView.builder(
+                  itemCount: items.length,
+                  itemBuilder: (_, i) =>
+                      LogRow(item: items[i], onTap: () => onTap(items[i])),
+                ),
+              ),
+            ),
           const SizedBox(height: 4),
         ],
       ),
@@ -101,16 +121,20 @@ class LogRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (typeColor, typeIcon) = _typeStyle;
+    final tanggal = DateFormat('dd MMM yyyy', 'id_ID').format(item.waktu);
     final waktu = DateFormat('HH:mm').format(item.waktu);
     final hasFoto = item.fotoUrls.isNotEmpty;
 
     return InkWell(
       onTap: onTap,
       child: Container(
+        height: LogAktivitasSection._rowHeight,
         decoration: BoxDecoration(
             border: Border(top: BorderSide(color: Colors.grey.shade100))),
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         child: Row(children: [
+          SizedBox(width: 90, child: Text(tanggal, style: GoogleFonts.inter(
+              fontSize: 12, color: AppColors.textGrey))),
           SizedBox(width: 70, child: Text(waktu, style: GoogleFonts.inter(
               fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textDark))),
           Container(

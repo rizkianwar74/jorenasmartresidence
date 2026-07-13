@@ -8,6 +8,7 @@ import '../widgets/admin_top_bar.dart';
 import 'widgets/reports_shared_widgets.dart';
 import 'widgets/reports_tab_bar.dart';
 import 'widgets/report_table.dart';
+import 'widgets/report_pagination_bar.dart';
 import 'widgets/detail_panel.dart';
 
 class AdminReportsPage extends StatefulWidget {
@@ -26,6 +27,9 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
   KeluhanItem? _selected;
 
   static const _tabs = ['Semua', 'Menunggu', 'Diproses', 'Selesai', 'Ditolak'];
+
+  static const _perPage = 10;
+  int _currentPage = 1;
 
   @override
   void initState() {
@@ -58,6 +62,16 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
   int get _cntMenunggu => _all.where((i) => i.status == StatusKeluhan.menunggu).length;
   int get _cntDiproses => _all.where((i) => i.status == StatusKeluhan.diproses).length;
   int get _cntSelesai  => _all.where((i) => i.status == StatusKeluhan.selesai).length;
+
+  // ── Pagination ───────────────────────────────────────────────────────────
+  int get _totalPages => (_filtered.length / _perPage).ceil().clamp(1, 9999);
+
+  List<KeluhanItem> get _pageItems {
+    final page  = _currentPage.clamp(1, _totalPages);
+    final start = (page - 1) * _perPage;
+    final end   = (start + _perPage).clamp(0, _filtered.length);
+    return _filtered.sublist(start, end);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -124,26 +138,33 @@ class _AdminReportsPageState extends State<AdminReportsPage> {
                                         'Diproses' : _cntDiproses,
                                       },
                                       onTabChanged: (t) => setState(() {
-                                        _activeTab = t;
-                                        _selected  = null;
+                                        _activeTab    = t;
+                                        _selected     = null;
+                                        _currentPage  = 1;
                                       }),
                                     ),
                                     ReportTable(
-                                      reports      : _filtered,
+                                      reports      : _pageItems,
                                       selectedId   : _selected?.id,
-                                      onRowTap     : (r) => setState(() => _selected = r),
+                                      onRowTap     : (r) async {
+                                        setState(() => _selected = r);
+                                        await showReportDetailDialog(
+                                          context,
+                                          initialReport: r,
+                                        );
+                                        if (mounted) {
+                                          setState(() => _selected = null);
+                                        }
+                                      },
+                                    ),
+                                    ReportPaginationBar(
+                                      currentPage  : _currentPage.clamp(1, _totalPages),
+                                      totalItems   : _filtered.length,
+                                      perPage      : _perPage,
+                                      onPageChanged: (p) => setState(() => _currentPage = p),
                                     ),
                                   ],
                                 ),
-                              ),
-
-                              const SizedBox(height: 20),
-
-                              // ── Detail ───────────────────────────────────
-                              DetailPanel(
-                                report: _selected,
-                                onAssigned: () =>
-                                    setState(() => _selected = null),
                               ),
                             ],
                           ),
