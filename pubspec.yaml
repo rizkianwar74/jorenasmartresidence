@@ -33,15 +33,11 @@ dependencies:
   cupertino_icons: ^1.0.8
   google_fonts: ^6.1.0
   image_picker: ^1.1.2
-  webview_flutter: ^4.13.0
   firebase_auth: ^5.0.0
   cloud_firestore: ^5.0.0
-  firebase_storage: ^12.0.0 
   firebase_core: ^3.0.0
-  cloud_functions: ^5.0.0
   http: ^1.2.0
   flutter_local_notifications: ^18.0.1
-  flutter_foreground_task: ^8.14.0
   audioplayers: ^6.0.0
   intl: ^0.19.0
   url_launcher: ^6.3.0
@@ -58,14 +54,28 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.3
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
+flutter_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/images/jorena_icon.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/images/jorena_icon.png"
+  web:
+    generate: false
+  windows:
+    generate: false
+
 # The following section is specific to Flutter packages.
 flutter:
   assets:
-    - assets/images/jorena_logo.jpg
+    - assets/images/jorena_logo.png
+    - assets/images/jorena_icon.png
     - assets/sounds/alarm_ringtone_sos.mp3
     - assets/sounds/notification.mp3
     - .env
