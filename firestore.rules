@@ -1,0 +1,135 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ── Helpers ────────────────────────────────────────────
+    function isAuth() {
+      return request.auth != null;
+    }
+    function role() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+    function isAdmin()  { return isAuth() && role() == 'admin'; }
+    function isSatpam() { return isAuth() && role() == 'satpam'; }
+    function isWarga()  { return isAuth() && role() == 'user'; }
+    function isStaff()  { return isAuth() && role() in ['satpam', 'admin']; }
+    function isOwner(field) {
+      return isAuth() && resource.data[field] == request.auth.uid;
+    }
+
+    // ── users ──────────────────────────────────────────────
+    match /users/{uid} {
+      allow get:    if request.auth != null && (request.auth.uid == uid || isStaff());
+      allow list:   if request.auth != null;
+      allow create: if isAdmin() || request.auth.uid == uid;
+      allow update: if request.auth != null && (request.auth.uid == uid || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // ── tagihan (Pakasir iuran) ───────────────────────────
+    // Perbaikan: warga TIDAK BOLEH lagi menulis status/tanggalBayar/metodeBayar
+    // sendiri (celah yang tadinya bikin webhook payment tidak efektif). Warga
+    // cuma boleh set orderId (dipakai saat mulai pembayaran). status:'lunas'
+    // sekarang eksklusif: admin manual, atau server webhook (Admin SDK, bypass
+    // rules ini). list dibatasi ke dokumen milik sendiri kecuali admin —
+    // pastikan semua query tagihan dari warga difilter where('userId', ==, uid).
+    match /tagihan/{docId} {
+      allow get: if isAuth() &&
+        (resource == null ||
+         resource.data.userId == request.auth.uid ||
+         isAdmin());
+
+      allow list: if isAdmin() ||
+        (isAuth() && resource.data.userId == request.auth.uid);
+
+      allow create: if isAdmin() ||
+        (isAuth() &&
+         request.resource.data.userId == request.auth.uid &&
+         request.resource.data.status == 'belumBayar');
+
+      allow update: if isAdmin() ||
+        (isOwner('userId') &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['orderId']));
+
+      allow delete: if isAdmin();
+    }
+
+    // ── patroli ────────────────────────────────────────────
+    // Perbaikan: hapus allow list terpisah yang lebih longgar dari allow read.
+    match /patroli/{docId} {
+      allow read:   if isStaff();
+      allow create: if isSatpam() || isAdmin();
+      allow update: if isSatpam() || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ── sosalert ───────────────────────────────────────────
+    match /sosalert/{alertId} {
+      allow create: if request.auth != null;
+      allow read, update: if request.auth != null &&
+        (resource.data.userId == request.auth.uid ||
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'satpam' ||
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+    }
+
+    // ── bantuanrequest ─────────────────────────────────────
+    // Perbaikan: list dibatasi ke milik sendiri kecuali staff (sebelumnya
+    // terbuka untuk siapa saja yang login).
+    match /bantuanrequest/{docId} {
+      allow create: if request.auth != null &&
+                       request.resource.data.uid == request.auth.uid;
+      allow get:    if request.auth != null &&
+                       (resource.data.uid == request.auth.uid || isStaff());
+      allow list:   if isStaff() ||
+                       (request.auth != null && resource.data.uid == request.auth.uid);
+      allow update: if isStaff() ||
+                       (request.auth != null &&
+                        resource.data.uid == request.auth.uid &&
+                        request.resource.data.status == 'CANCELLED');
+    }
+
+    // ── keluhan ────────────────────────────────────────────
+    match /keluhan/{docId} {
+      allow read:   if isStaff() || isOwner('uid');
+      allow create: if isAuth();
+      allow update: if isStaff() || isOwner('uid');
+      allow delete: if isAdmin();
+    }
+
+    // ── insiden ────────────────────────────────────────────
+    // Perbaikan: hapus allow list terpisah yang lebih longgar dari allow read.
+    match /insiden/{docId} {
+      allow read:   if isStaff();
+      allow create: if isSatpam() || isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ── beritaacara ────────────────────────────────────────
+    match /beritaacara/{docId} {
+      allow read:   if isAuth();
+      allow create: if isStaff();
+      allow update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    // ── catatantamu ────────────────────────────────────────
+    // Perbaikan: hapus allow list terpisah yang lebih longgar dari allow read.
+    match /catatantamu/{docId} {
+      allow create: if isStaff();
+      allow read:   if isStaff();
+      allow update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    // ── settings ───────────────────────────────────────────
+    match /settings/{docId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
+    // NOTE: match /keluhan/{uid}/{docId}/{fileName} dihapus — tidak dipakai di
+    // kode (foto keluhan disimpan sebagai fotoUrls di dokumen keluhan
+    // langsung, bukan lewat path ini). Kalau ternyata masih dipakai di tempat
+    // lain yang belum ketemu, beri tahu saya sebelum deploy.
+  }
+}

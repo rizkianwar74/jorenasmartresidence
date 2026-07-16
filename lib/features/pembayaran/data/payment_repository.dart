@@ -52,11 +52,21 @@ class PaymentRepository {
   /// Catatan: `whereIn` Firestore dibatasi maksimal 30 nilai — jauh lebih
   /// dari cukup untuk jumlah bulan tunggakan yang realistis dalam satu
   /// transaksi pembayaran.
-  static Stream<List<TagihanModel>> watchTagihanByIds(List<String> ids) {
+  ///
+  /// `userId` WAJIB diisi (bukan cuma untuk keamanan aplikasi, tapi juga
+  /// supaya query ini valid terhadap Firestore Security Rules — rule
+  /// `tagihan` membatasi `list` ke dokumen milik `request.auth.uid`, dan
+  /// Firestore butuh filter `where('userId', ...)` yang eksplisit di query
+  /// untuk bisa memverifikasi itu, tidak cukup hanya `whereIn` documentId).
+  static Stream<List<TagihanModel>> watchTagihanByIds(
+    List<String> ids, {
+    required String userId,
+  }) {
     if (ids.isEmpty) return Stream.value(const []);
     return _db
         .collection(_collection)
         .where(FieldPath.documentId, whereIn: ids)
+        .where('userId', isEqualTo: userId)
         .snapshots()
         .map((snap) => snap.docs
             .map((d) => TagihanModel.fromMap(d.id, d.data()))

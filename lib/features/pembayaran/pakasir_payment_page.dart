@@ -45,14 +45,14 @@ class _PakasirPaymentPageState extends State<PakasirPaymentPage> {
   String? _orderId;
   StreamSubscription<List<TagihanModel>>? _tagihanSub;
 
-  TagihanModel  get _tertua      => widget.tagihanList.first;
+  TagihanModel  get _terlama      => widget.tagihanList.first;
   TagihanModel  get _terbaru     => widget.tagihanList.last;
   List<String>  get _ids         => widget.tagihanList.map((t) => t.id).toList();
   int           get _totalJumlah =>
       widget.tagihanList.fold(0, (sum, t) => sum + t.jumlah);
   String        get _periodeLabel => widget.tagihanList.length > 1
       ? '${widget.tagihanList.length} Bulan Tertunggak'
-      : _tertua.periodeLabel;
+      : _terlama.periodeLabel;
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
   @override
@@ -112,7 +112,14 @@ class _PakasirPaymentPageState extends State<PakasirPaymentPage> {
   // memverifikasi ulang pembayaran ke Pakasir. Begitu SEMUA tagihan yang
   // sedang dibayar berstatus lunas, anggap pembayaran selesai.
   void _listenForPaymentConfirmation() {
-    _tagihanSub = PaymentRepository.watchTagihanByIds(_ids).listen((list) {
+    final uid = AuthRepository.currentUid;
+    if (uid == null) {
+      debugPrint('[PakasirPaymentPage] uid null, tidak bisa listen tagihan.');
+      return;
+    }
+    _tagihanSub = PaymentRepository
+        .watchTagihanByIds(_ids, userId: uid)
+        .listen((list) {
       if (_resolved) return;
       // Pastikan SEMUA tagihan yang dibayar sudah kembali (bukan snapshot
       // parsial) dan semuanya sudah lunas sebelum dianggap selesai.
@@ -144,18 +151,18 @@ class _PakasirPaymentPageState extends State<PakasirPaymentPage> {
 
     // Buat model representatif untuk status page.
     final combined = TagihanModel(
-      id          : _tertua.id,
-      bulan       : widget.tagihanList.length > 1 ? _periodeLabel : _tertua.bulan,
-      bulanIndex  : _tertua.bulanIndex,
+      id          : _terlama.id,
+      bulan       : widget.tagihanList.length > 1 ? _periodeLabel : _terlama.bulan,
+      bulanIndex  : _terlama.bulanIndex,
       tahun       : _terbaru.tahun,
-      namaResiden : _tertua.namaResiden,
-      blok        : _tertua.blok,
-      nomorUnit   : _tertua.nomorUnit,
+      namaResiden : _terlama.namaResiden,
+      blok        : _terlama.blok,
+      nomorUnit   : _terlama.nomorUnit,
       jumlah      : _totalJumlah,
-      jatuhTempo  : _tertua.jatuhTempo,
+      jatuhTempo  : _terlama.jatuhTempo,
       status      : StatusTagihan.lunas,
-      userId      : _tertua.userId,
-      nomorHp     : _tertua.nomorHp,
+      userId      : _terlama.userId,
+      nomorHp     : _terlama.nomorHp,
     );
 
     Navigator.pushReplacement(
@@ -263,8 +270,8 @@ class _PakasirPaymentPageState extends State<PakasirPaymentPage> {
             _SummaryCard(
               periodeLabel: _periodeLabel,
               totalJumlah:  _totalJumlah,
-              namaResiden:  _tertua.namaResiden,
-              unitLabel:    _tertua.unitLabel,
+              namaResiden:  _terlama.namaResiden,
+              unitLabel:    _terlama.unitLabel,
             ),
 
             const SizedBox(height: 36),

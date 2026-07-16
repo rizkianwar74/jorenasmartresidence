@@ -6,13 +6,14 @@ Aplikasi manajemen perumahan berbasis Flutter dan Firebase. Mendukung tiga peran
 
 ## Fitur Utama
 
-- Autentikasi berbasis username (login, register, lupa password)
+- Autentikasi berbasis **email** + password (login, register, lupa password). `username` tetap dikumpulkan saat registrasi sebagai field profil, tapi login memakai email, bukan username.
 - Dashboard warga — berita, layanan, keluhan, tagihan, komunitas
 - Dashboard satpam — patroli, catat tamu, laporan insiden, keluhan warga
-- Dashboard admin — manajemen warga, keamanan, laporan, berita, tamu
+- Dashboard admin — manajemen warga, keamanan, laporan, berita, tamu, billing
+- Pembayaran iuran via **Pakasir** (QRIS) — status lunas diverifikasi oleh server webhook terpisah, bukan client, lihat [Pembayaran & Webhook Server](#pembayaran--webhook-server)
 - SOS & Bantuan Satpam realtime via Firestore
-- Upload foto bukti keluhan ke Firebase Storage
-- Notifikasi lokal untuk SOS
+- Notifikasi push via **OneSignal** + notifikasi lokal untuk SOS
+- Foto (bukti keluhan, bantuan, patroli, berita, profil) disimpan sebagai **base64 data URI langsung di field Firestore** (mis. `fotoUrls`, `imageUrl`, `photoUrl`) — project ini **tidak** memakai Firebase Storage sama sekali (tidak ada paket `firebase_storage` di `pubspec.yaml`)
 
 ---
 
@@ -25,7 +26,7 @@ Pastikan semua tools berikut sudah terpasang di komputer Anda:
 | Flutter SDK | 3.10.0 | https://docs.flutter.dev/get-started/install |
 | Dart SDK | 3.0.0 | (bundled dengan Flutter) |
 | Android Studio / VS Code | terbaru | https://developer.android.com/studio |
-| Node.js | 18.x | https://nodejs.org (untuk Firebase CLI) |
+| Node.js | 18.x | https://nodejs.org (untuk Firebase CLI & server webhook) |
 | Firebase CLI | terbaru | `npm install -g firebase-tools` |
 | Git | terbaru | https://git-scm.com |
 
@@ -52,7 +53,19 @@ cd aplikasismartresidence
 flutter pub get
 ```
 
-### 3. Firebase
+### 3. Environment Variables
+
+Aplikasi butuh file `.env` (di-gitignore, tidak ikut commit) untuk API key yang tidak sensitif di sisi client:
+
+```bash
+cp .env.example .env
+```
+
+Isi `PAKASIR_SLUG` (nama proyek di dashboard Pakasir) dan `ONESIGNAL_REST_API_KEY` (dari dashboard OneSignal → Settings → Keys & IDs). **Tanpa file ini, `flutter run` akan gagal.**
+
+> `PAKASIR_API_KEY` **sengaja tidak ada** di `.env` client — key itu sensitif dan hanya hidup di server webhook (`server/pakasir-webhook/.env`), lihat bagian [Pembayaran & Webhook Server](#pembayaran--webhook-server).
+
+### 4. Firebase
 
 > **Tidak perlu setup Firebase tambahan.**
 > File `google-services.json` sudah disertakan di repository sehingga aplikasi langsung terhubung ke backend Firebase yang sudah berjalan.
@@ -63,38 +76,34 @@ Jika Anda ingin menggunakan **Firebase project milik sendiri** (misalnya untuk d
 <summary>Setup Firebase project sendiri (opsional)</summary>
 
 1. Buka [Firebase Console](https://console.firebase.google.com) → buat proyek baru
-2. Aktifkan: **Authentication** (Email/Password), **Firestore**, **Storage**, **Cloud Functions**
+2. Aktifkan: **Authentication** (Email/Password) dan **Firestore**
+   (Cloud Functions **tidak** dipakai di project ini — lihat catatan di `functions/index.js` untuk alasannya. **Storage** juga tidak dipakai — semua foto disimpan sebagai base64 langsung di dokumen Firestore, lihat [Fitur Utama](#fitur-utama))
 3. Daftarkan app Android dengan package name `com.example.aplikasismartresidence`
 4. Download `google-services.json` dan letakkan di `android/app/`
-5. Set Firestore Rules:
-   ```
-   match /{document=**} {
-     allow read, write: if request.auth != null;
-   }
-   ```
-6. Set Storage Rules:
-   ```
-   match /{allPaths=**} {
-     allow read, write: if request.auth != null;
-   }
+5. Deploy Firestore Rules dari repo (sudah di-versionkan di `firestore.rules`, bukan lagi diatur manual lewat Console):
+   ```bash
+   firebase login
+   firebase use <project-id-anda>
+   firebase deploy --only firestore:rules
    ```
 
 </details>
 
-### 4. Struktur Koleksi Firestore
+### 5. Struktur Koleksi Firestore
 
 Buat koleksi berikut secara manual atau melalui aplikasi:
 
 | Koleksi | Keterangan |
 |---------|------------|
-| `users` | Data pengguna (warga, satpam, admin). Field: `uid`, `username`, `namaLengkap`, `email`, `role`, `blok`, `nomorUnit`, `isOnDuty` |
+| `users` | Data pengguna. Field: `uid`, `username`, `namaLengkap`, `email`, `role` (`"user"` = warga, `"satpam"`, `"admin"`), `blok`, `nomorUnit`, `isOnDuty` |
+| `tagihan` | Tagihan iuran bulanan warga (status `belumBayar`/`lunas`, `orderId` Pakasir, dll.) |
 | `keluhan` | Laporan keluhan warga |
 | `bantuanrequest` | Permintaan bantuan satpam |
 | `sosalert` | Alert SOS darurat |
 | `patroli` | Log patroli satpam |
 | `insiden` | Laporan insiden satpam |
 | `catatantamu` | Data tamu masuk |
-| `berita` | Berita perumahan |
+| `beritaacara` | Berita & pengumuman perumahan (nama koleksi aktual, bukan `berita`) |
 | `settings` | Konfigurasi (kontak pengelola, dll.) |
 
 Untuk menambah admin pertama, buat dokumen di koleksi `users` dengan field `role: "admin"` setelah registrasi.
@@ -140,41 +149,70 @@ flutter build appbundle --release
 
 ---
 
+## Pembayaran & Webhook Server
+
+Verifikasi status pembayaran Pakasir **tidak** dilakukan oleh app Flutter (client tidak bisa dipercaya untuk keputusan finansial). Alurnya:
+
+```
+Pakasir → webhook → server/pakasir-webhook/ (Vercel) → verifikasi ulang ke Pakasir
+        → tulis status:'lunas' ke Firestore via Firebase Admin SDK
+        → app Flutter listen perubahan itu lewat Firestore stream
+```
+
+- Kode server ada di `server/pakasir-webhook/` (Node.js/TypeScript, deploy ke Vercel — lihat `server/pakasir-webhook/README.md` untuk cara deploy & set environment variables).
+- Latar belakang masalah, keputusan arsitektur, dan status implementasi ada di `docs/payment_webhook_fix_prompt.md`.
+- Firestore Security Rules untuk collection `tagihan` (di `firestore.rules`) membatasi warga hanya boleh mengubah field `orderId` miliknya sendiri — field `status`/`tanggalBayar`/`metodeBayar` eksklusif ditulis admin (manual) atau server webhook (Admin SDK, bypass rules).
+- Project ini **tidak** menggunakan Firebase Cloud Functions/Blaze plan untuk apa pun, termasuk seed tagihan bulanan otomatis — lihat catatan di `functions/index.js` (disimpan sebagai referensi, tidak di-deploy) dan `PaymentRepository.ensureAllMissingTagihan()` sebagai gantinya yang jalan dari client.
+
+---
+
 ## Struktur Folder
 
 ```
 lib/
 ├── core/
-│   ├── router/          # AppRouter (named routes)
-│   ├── services/        # Keluhan, SOS, Bantuan service
-│   └── theme/           # AppColors
+│   ├── constants/        # Konstanta umum
+│   ├── data/              # Repository lintas-fitur (keluhan, SOS, bantuan)
+│   ├── router/             # AppRouter (named routes)
+│   ├── services/           # Pakasir, OneSignal, SOS notification
+│   ├── theme/              # AppColors, AppTheme, AppSpacing, AppTextStyles, AppConstants
+│   └── utils/               # Helper (responsive, dll.)
 ├── features/
-│   ├── admin/           # Halaman & logika admin
-│   ├── auth/            # Login, register, lupa password
-│   ├── home/            # Home warga & satpam
-│   ├── komunitas/       # Direktori warga
-│   ├── layanan/         # Layanan, keluhan, darurat
-│   ├── pembayaran/      # Tagihan
-│   ├── profile/         # Profil & pengaturan
-│   ├── security/        # Satpam: patroli, tamu, insiden
-│   └── splash/          # Splash screen
+│   ├── admin/             # Dashboard admin: berita, billing, fasilitas, insiden,
+│   │                       #   payment_detail, reports, security, tamu, warga_user
+│   ├── auth/               # data/ (AuthRepository), pages/ (login, register, lupa
+│   │                       #   password), widgets/
+│   ├── berita/             # Berita untuk warga (list & detail)
+│   ├── home/                # Home warga (satpam home ada di features/satpam/home)
+│   ├── komunitas/           # Direktori warga
+│   ├── layanan/             # Layanan: fasilitas, kantin, lapor keluhan, pusat bantuan
+│   ├── pembayaran/          # Tagihan & halaman pembayaran Pakasir
+│   ├── profile/              # Profil & pengaturan akun
+│   ├── satpam/               # Dashboard satpam: home, insiden, laporan, patroli, tamu
+│   ├── security/              # Sisa modul security bersama: bantuan, sos, helpers
+│   └── splash/                 # Splash screen
 └── shared/
-    └── widgets/         # Widget reusable (bottom nav, dll.)
+    └── widgets/                # Widget reusable (bottom nav, empty state, loading, dll.)
 
 assets/
-├── images/              # Logo dan gambar
-└── sounds/              # Ringtone SOS & notifikasi
+├── images/                 # Logo dan gambar
+└── sounds/                  # Ringtone SOS & notifikasi
+
+server/
+└── pakasir-webhook/         # Server webhook verifikasi pembayaran (Vercel, terpisah dari app Flutter)
+
+functions/                   # Cloud Functions — TIDAK di-deploy (project tidak pakai Blaze), disimpan sebagai referensi
 ```
 
 ---
 
 ## Akun Role untuk Testing
 
-Buat akun melalui fitur Register di aplikasi, lalu ubah field `role` di Firestore:
+Buat akun melalui fitur Register di aplikasi (default role saat registrasi adalah warga), lalu ubah field `role` di Firestore kalau perlu akun satpam/admin:
 
 | Role | Field di Firestore |
 |------|-------------------|
-| Warga (default) | `role: "warga"` |
+| Warga (default) | `role: "user"` |
 | Satpam | `role: "satpam"` |
 | Admin | `role: "admin"` |
 
@@ -194,11 +232,20 @@ flutter clean && flutter pub get
 **Flutter doctor menunjukkan masalah Android SDK**
 → Buka Android Studio → SDK Manager → install Android SDK 33+
 
-**Firestore permission denied**
-→ Periksa Security Rules di Firebase Console, pastikan user sudah login
+**`flutter run` gagal / dotenv error saat start**
+→ Pastikan `.env` sudah dibuat dari `.env.example` (lihat langkah Instalasi #3) dan berisi `PAKASIR_SLUG` + `ONESIGNAL_REST_API_KEY`.
 
-**Foto tidak terupload**
-→ Periksa Storage Rules di Firebase Console, pastikan path `keluhan/` diizinkan
+**APK ter-install tapi macet di splash screen**
+→ Biasanya mismatch nama resource icon (`@mipmap/ic_launcher` vs `@mipmap/launcher_icon` dari `flutter_launcher_icons`). Cek `lib/core/services/sos_notification_service.dart` dan `lib/main.dart`.
+
+**Firestore permission denied**
+→ Periksa `firestore.rules` sudah ter-deploy (`firebase deploy --only firestore:rules`) dan sesuai dengan operasi yang dilakukan (mis. warga tidak boleh menulis field `status` di `tagihan`, lihat bagian Pembayaran & Webhook Server).
+
+**Status tagihan tidak berubah jadi lunas setelah bayar**
+→ Ini ditulis oleh server webhook, bukan app. Pastikan `server/pakasir-webhook/` sudah di-deploy ke Vercel, environment variables sudah diset, dan webhook URL sudah didaftarkan di dashboard Pakasir. Lihat `server/pakasir-webhook/README.md`.
+
+**Foto gagal tersimpan / error saat kirim keluhan-bantuan-patroli**
+→ Foto disimpan sebagai base64 di field Firestore (bukan Firebase Storage), jadi ukurannya ikut menambah ukuran dokumen. Firestore membatasi ukuran dokumen maksimal ±1 MiB — kalau foto terlalu besar/banyak dalam satu laporan, penyimpanan bisa gagal. Kompres/batasi resolusi foto di `image_picker` kalau ini terjadi.
 
 ---
 
@@ -206,8 +253,12 @@ flutter clean && flutter pub get
 
 - [Flutter](https://flutter.dev) — UI framework
 - [Firebase Auth](https://firebase.google.com/docs/auth) — Autentikasi
-- [Cloud Firestore](https://firebase.google.com/docs/firestore) — Database realtime
-- [Firebase Storage](https://firebase.google.com/docs/storage) — Penyimpanan foto
-- [Cloud Functions](https://firebase.google.com/docs/functions) — Backend logic
+- [Cloud Firestore](https://firebase.google.com/docs/firestore) — Database realtime (termasuk foto, disimpan sebagai base64 — **tidak** ada Firebase Storage di project ini)
+- [Pakasir](https://pakasir.com) — Payment gateway QRIS untuk iuran warga
+- [Vercel](https://vercel.com) — Hosting server webhook verifikasi pembayaran (`server/pakasir-webhook/`)
+- [OneSignal](https://onesignal.com) — Push notification
+- [flutter_dotenv](https://pub.dev/packages/flutter_dotenv) — Konfigurasi `.env` di client
 - [Google Fonts](https://pub.dev/packages/google_fonts) — Tipografi
 - [flutter_local_notifications](https://pub.dev/packages/flutter_local_notifications) — Notifikasi lokal
+
+> Firebase Cloud Functions **tidak dipakai** (project sengaja tidak upgrade ke plan Blaze) — lihat `functions/index.js` dan bagian Pembayaran & Webhook Server di atas.

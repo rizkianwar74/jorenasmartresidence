@@ -7,12 +7,28 @@
  * 2. onUserCreated       — Firestore onCreate trigger users/{uid}
  *                          → buat tagihan bulan ini saat user baru daftar
  *
- * Deploy:
+ * STATUS: TIDAK DI-DEPLOY. Project ini sengaja tidak upgrade ke Firebase
+ * Blaze plan, dan Cloud Functions 2nd-gen (firebase-functions/v2/...) —
+ * baik yang scheduled (seedTagihanBulanan) MAUPUN Firestore trigger
+ * (onUserCreated) — berjalan di atas Cloud Run/Eventarc, yang mensyaratkan
+ * Blaze untuk SEMUA jenis trigger, bukan cuma yang scheduled. (Catatan lama
+ * di sini pernah menyebut onUserCreated bisa jalan di Spark/free plan —
+ * itu tidak akurat, sudah diperbaiki.)
+ *
+ * File ini disimpan sebagai referensi/dokumentasi logika saja, bukan untuk
+ * dideploy. Penggantinya yang aktif berjalan dari sisi client:
+ *   - PaymentRepository.ensureAllMissingTagihan() (lib/features/pembayaran/
+ *     data/payment_repository.dart), dipanggil dari home_page.dart tiap
+ *     warga buka app — backfill semua tagihan bulanan yang bolong (bukan
+ *     cuma bulan berjalan), sehingga meng-cover fungsi seedTagihanBulanan
+ *     DAN onUserCreated sekaligus, tanpa perlu Cloud Functions/Blaze.
+ *   - Konsekuensinya: tagihan bulan berjalan baru muncul di dashboard admin
+ *     setelah warga bersangkutan membuka app minimal sekali di bulan itu
+ *     (bukan otomatis tanggal 1 seperti kalau pakai scheduled function).
+ *
+ * Deploy (kalau suatu saat upgrade ke Blaze dan ingin dipakai lagi):
  *   cd functions && npm install
  *   firebase deploy --only functions
- *
- * CATATAN: seedTagihanBulanan (scheduled) memerlukan Firebase Blaze plan.
- * onUserCreated (Firestore trigger) bisa jalan di Spark (free) plan.
  */
 
 const { onSchedule } = require("firebase-functions/v2/scheduler");
