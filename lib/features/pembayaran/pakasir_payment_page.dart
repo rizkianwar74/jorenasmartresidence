@@ -6,7 +6,6 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/services/pakasir_service.dart';
-import '../../core/services/onesignal_service.dart';
 import '../auth/data/auth_repository.dart';
 import 'models/tagihan_model.dart';
 import 'data/payment_repository.dart';
@@ -108,7 +107,7 @@ class _PakasirPaymentPageState extends State<PakasirPaymentPage> {
   }
 
   // ── Tunggu konfirmasi via Firestore ────────────────────────────────────────
-  // Server webhook (server/pakasir-webhook/) yang menulis status ini setelah
+  // Server webhook (server/api/pakasir-webhook.ts) yang menulis status ini setelah
   // memverifikasi ulang pembayaran ke Pakasir. Begitu SEMUA tagihan yang
   // sedang dibayar berstatus lunas, anggap pembayaran selesai.
   void _listenForPaymentConfirmation() {
@@ -135,17 +134,11 @@ class _PakasirPaymentPageState extends State<PakasirPaymentPage> {
     _resolved = true;
     _tagihanSub?.cancel();
 
-    // Kirim push notification ke user.
-    final uid = AuthRepository.currentUid;
-    if (uid != null) {
-      try {
-        await OneSignalService.instance.sendPaymentSuccess(
-          userId:  uid,
-          periode: _periodeLabel,
-          jumlah:  formatRupiah(_totalJumlah),
-        );
-      } catch (_) {}
-    }
+    // Notifikasi "pembayaran berhasil" TIDAK dikirim dari sini lagi.
+    // Pemicunya kini server webhook Pakasir, tepat setelah tagihan ditandai
+    // lunas (server/api/pakasir-webhook.ts). Dengan begitu notifikasi tetap
+    // sampai meskipun warga sudah menutup aplikasi sebelum halaman ini sempat
+    // menerima pembaruan dari Firestore.
 
     if (!mounted) return;
 

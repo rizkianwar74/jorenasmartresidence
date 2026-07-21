@@ -191,12 +191,7 @@ class SosRepository {
 
       // Kirim push ke satpam bertugas (fire-and-forget; dokumen SOS
       // sudah tersimpan, jadi kegagalan push tidak memblok alur).
-      OneSignalService.instance.sendSosToOnDutySatpam(
-        isSos: type == SosType.sos,
-        namaWarga: namaWarga,
-        blok: blok,
-        nomorUnit: nomorUnit,
-      );
+      OneSignalService.instance.sendSosBaru(docId: ref.id);
 
       return SosAlert(
         id: ref.id,
@@ -267,7 +262,7 @@ class SosRepository {
         .snapshots()
         .map((snap) {
           final list = snap.docs.map(SosAlert.fromDoc).toList();
-          list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          list.sort((a, b) => a.createdAt.compareTo(b.createdAt));
           return list;
         });
   }

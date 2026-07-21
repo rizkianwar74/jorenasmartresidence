@@ -161,8 +161,14 @@ class AdminRepository {
   Stream<QuerySnapshot<Map<String, dynamic>>> beritaStream() =>
       _db.collection(_beritaAcara).snapshots();
 
-  Future<void> createBerita(Map<String, dynamic> data) =>
-      _db.collection(_beritaAcara).add(data);
+  /// Buat berita baru, mengembalikan ID dokumennya.
+  ///
+  /// ID dibutuhkan pemanggil untuk memicu notifikasi — server notifikasi
+  /// membaca judul & status publikasi langsung dari dokumen ini.
+  Future<String> createBerita(Map<String, dynamic> data) async {
+    final ref = await _db.collection(_beritaAcara).add(data);
+    return ref.id;
+  }
 
   Future<void> updateBerita(String id, Map<String, dynamic> data) =>
       _db.collection(_beritaAcara).doc(id).update(data);

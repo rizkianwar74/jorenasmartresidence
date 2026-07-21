@@ -78,11 +78,7 @@ class _SatpamLaporanPageState extends State<SatpamLaporanPage> {
       respondedBy: uid,
     );
     // Notifikasi ke user yang meminta bantuan (fire-and-forget).
-    OneSignalService.instance.sendBantuanUpdate(
-      userId     : req.uid,
-      onMyWay    : true,
-      namaSatpam : repo.satpamDisplayName,
-    );
+    OneSignalService.instance.sendBantuanUpdate(docId: req.id);
   }
 
   Future<void> _onResolved(BantuanRequest req) async {
@@ -122,11 +118,7 @@ class _SatpamLaporanPageState extends State<SatpamLaporanPage> {
         status: BantuanStatus.resolved,
       );
       // Notifikasi ke user yang meminta bantuan (fire-and-forget).
-      OneSignalService.instance.sendBantuanUpdate(
-        userId     : req.uid,
-        onMyWay    : false,
-        namaSatpam : SecurityRepository.instance.satpamDisplayName,
-      );
+      OneSignalService.instance.sendBantuanUpdate(docId: req.id);
     }
   }
 

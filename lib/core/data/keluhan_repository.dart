@@ -212,11 +212,7 @@ class KeluhanRepository {
       );
 
       // Notifikasi ke satpam on duty (fire-and-forget).
-      OneSignalService.instance.sendKeluhanBaruToSatpam(
-        namaWarga : namaWarga,
-        judul     : judul,
-        kategori  : kategori,
-      );
+      OneSignalService.instance.sendKeluhanBaru(docId: ref.id);
 
       return (item, fotoErrors);
     } catch (e) {

@@ -128,11 +128,7 @@ class _ReportDetailDialogState extends State<_ReportDetailDialog> {
           satpamNama : result.nama,
         );
         // Notifikasi ke satpam yang ditugaskan (fire-and-forget).
-        OneSignalService.instance.sendKeluhanAssigned(
-          satpamUid : result.uid,
-          namaWarga : item.namaWarga,
-          judul     : item.judul,
-        );
+        OneSignalService.instance.sendKeluhanAssigned(docId: item.id);
         if (mounted) {
           setState(() => _assigning = false);
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -150,21 +146,12 @@ class _ReportDetailDialogState extends State<_ReportDetailDialog> {
   Future<void> _updateStatus(KeluhanItem item, StatusKeluhan s) async {
     await KeluhanRepository.updateStatus(keluhanId: item.id, status: s);
     // Notifikasi ke warga pemilik keluhan (fire-and-forget).
-    OneSignalService.instance.sendKeluhanUpdate(
-      userId       : item.uid,
-      statusLabel  : _statusLabelFor(s),
-      judulKeluhan : item.judul,
-    );
+    OneSignalService.instance.sendKeluhanUpdate(docId: item.id);
   }
 
-  String _statusLabelFor(StatusKeluhan s) {
-    switch (s) {
-      case StatusKeluhan.diproses: return 'Sedang Diproses';
-      case StatusKeluhan.selesai:  return 'Selesai';
-      case StatusKeluhan.ditolak:  return 'Ditolak';
-      default:                     return 'Menunggu';
-    }
-  }
+  // _statusLabelFor() dihapus — label status kini disusun server notifikasi
+  // dari status yang dibacanya sendiri di Firestore, sehingga tidak perlu lagi
+  // dikirim dari sini.
 
   @override
   Widget build(BuildContext context) {

@@ -16,21 +16,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import * as admin from 'firebase-admin';
-
-// ── Firebase Admin init (sekali per cold start, dipakai ulang tiap warm invoke) ──
-if (!admin.apps.length) {
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-  if (!raw) {
-    throw new Error(
-      'FIREBASE_SERVICE_ACCOUNT_JSON belum di-set di environment variables.',
-    );
-  }
-  const serviceAccount = JSON.parse(raw) as admin.ServiceAccount;
-  admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
-}
-
-const db = admin.firestore();
+// Inisialisasi Firebase Admin dipindahkan ke ../lib/firebase agar dipakai
+// bersama dengan endpoint send-notification — kalau tiap endpoint memanggil
+// initializeApp() sendiri, Firebase melempar error pada invoke yang warm.
+import { db } from '../lib/firebase';
+import { sendPush } from '../lib/onesignal';
 
 // ── Nama bulan singkat — HARUS sama persis dengan bulanSingkatList di Dart ──
 // (lib/features/pembayaran/models/tagihan_model.dart) supaya format
@@ -103,6 +93,52 @@ async function verifyWithPakasir(orderId: string, amount: number) {
   return data.transaction;
 }
 
+// ── Notifikasi "pembayaran berhasil" ke pemilik tagihan ──────────────────────
+// Satu orderId bisa mencakup beberapa dokumen tagihan sekaligus (warga melunasi
+// beberapa bulan tunggakan dalam satu transaksi). Semuanya milik satu warga,
+// jadi cukup satu notifikasi yang merangkum seluruh periode.
+async function notifyPembayaranLunas(
+  docs: FirebaseFirestore.QueryDocumentSnapshot[],
+): Promise<void> {
+  try {
+    const userId = docs[0].get('userId') as string | undefined;
+    if (!userId) {
+      console.error('[pakasir-webhook] tagihan tanpa userId — notifikasi dilewati');
+      return;
+    }
+
+    // Dokumen tagihan tidak menyimpan field `periode`; label periodenya
+    // dibentuk dari `bulan` + `tahun`, sama seperti getter periodeLabel di
+    // lib/features/pembayaran/models/tagihan_model.dart.
+    const periode = docs
+      .map((d) => {
+        const bulan = d.get('bulan') as string | undefined;
+        const tahun = d.get('tahun') as number | undefined;
+        return bulan && tahun ? `${bulan} ${tahun}` : '';
+      })
+      .filter((p) => p.length > 0);
+
+    const rincian = periode.length === 0
+      ? 'Iuran Anda'
+      : periode.length === 1
+        ? `Iuran ${periode[0]}`
+        : `Iuran ${periode.length} periode (${periode.join(', ')})`;
+
+    await sendPush(
+      { kind: 'pengguna', uid: userId },
+      {
+        title: '✅ Pembayaran Berhasil!',
+        body: `${rincian} telah dikonfirmasi.`,
+      },
+    );
+  } catch (err) {
+    // Notifikasi bersifat pelengkap — tagihan sudah lunas di Firestore dan app
+    // akan menampilkannya lewat stream listener. Kegagalan di sini tidak boleh
+    // membuat webhook membalas error, karena Pakasir akan mengulang kirim.
+    console.error('[pakasir-webhook] notifikasi pembayaran gagal:', err);
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     res.status(405).json({ ok: false, message: 'Method not allowed' });
@@ -166,6 +202,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     });
     await batch.commit();
+
+    // 4. Beri tahu warga bahwa pembayarannya sudah dikonfirmasi.
+    //
+    // Notifikasi ini SENGAJA dipicu di sini, bukan di app Flutter. Sebelumnya
+    // PakasirPaymentPage yang mengirimnya setelah pembayaran selesai — akibatnya
+    // warga tidak menerima notifikasi apa pun bila menutup aplikasi sebelum
+    // proses itu sempat berjalan, padahal tagihannya sudah lunas. Dipicu dari
+    // sini, notifikasi tetap terkirim dalam kondisi apa pun.
+    await notifyPembayaranLunas(snap.docs);
 
     console.log(
       `[pakasir-webhook] OK — ${snap.docs.length} tagihan ditandai lunas untuk orderId=${body.order_id}`,

@@ -457,11 +457,7 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
       respondedBy: uid,
     );
     // Notifikasi balik ke user pemilik SOS (fire-and-forget).
-    OneSignalService.instance.sendSosUpdate(
-      userId     : alert.userId,
-      onMyWay    : true,
-      namaSatpam : repo.satpamDisplayName,
-    );
+    OneSignalService.instance.sendSosUpdate(docId: alert.id);
     // Batalkan notif setelah direspons
     if (alert.type == SosType.sos) {
       await SosNotificationService.cancelSosNotification();
@@ -477,11 +473,7 @@ class _SatpamHomePageState extends State<SatpamHomePage> {
       status: SosStatus.resolved,
     );
     // Notifikasi balik ke user pemilik SOS (fire-and-forget).
-    OneSignalService.instance.sendSosUpdate(
-      userId     : alert.userId,
-      onMyWay    : false,
-      namaSatpam : SecurityRepository.instance.satpamDisplayName,
-    );
+    OneSignalService.instance.sendSosUpdate(docId: alert.id);
   }
 
   @override

@@ -1,0 +1,18 @@
+{
+  "name": "smart-residence-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Server tepercaya (trusted server layer) untuk Smart Residence, di-deploy sebagai Vercel serverless function. Menangani dua hal: (1) verifikasi webhook pembayaran Pakasir lalu menulis status lunas ke Firestore lewat Firebase Admin SDK, dan (2) pengiriman push notification OneSignal. Seluruh kunci rahasia sistem hanya hidup di sini sebagai environment variable, tidak pernah ikut ke app Flutter.",
+  "scripts": {
+    "dev": "vercel dev",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@vercel/node": "^3.2.0",
+    "typescript": "^5.6.3"
+  }
+}

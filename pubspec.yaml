@@ -42,7 +42,6 @@ dependencies:
   intl: ^0.19.0
   url_launcher: ^6.3.0
   onesignal_flutter: ^5.3.0
-  flutter_dotenv: ^5.1.0
 
 dev_dependencies:
   flutter_test:
@@ -78,7 +77,6 @@ flutter:
     - assets/images/jorena_icon.png
     - assets/sounds/alarm_ringtone_sos.mp3
     - assets/sounds/notification.mp3
-    - .env
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

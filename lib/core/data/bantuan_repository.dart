@@ -199,12 +199,7 @@ class BantuanRepository {
       _activeRequestId = ref.id;
 
       // Notifikasi ke satpam on duty (fire-and-forget).
-      OneSignalService.instance.sendBantuanBaruToSatpam(
-        namaWarga : namaWarga,
-        blok      : blok,
-        nomorUnit : nomorUnit,
-        kategori  : kategori,
-      );
+      OneSignalService.instance.sendBantuanBaru(docId: ref.id);
 
       return BantuanRequest(
         id        : ref.id,

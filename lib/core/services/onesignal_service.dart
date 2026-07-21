@@ -1,23 +1,46 @@
 import 'dart:convert';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode, debugPrint;
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:onesignal_flutter/onesignal_flutter.dart';
 
-/// Wrapper terpusat untuk SEMUA interaksi dengan OneSignal SDK.
+/// Wrapper terpusat untuk SEMUA interaksi dengan OneSignal.
 ///
 /// Mengikuti panduan integrasi OneSignal: tidak boleh ada pemanggilan
 /// `OneSignal.*` langsung di luar kelas ini. Tujuannya agar mudah diuji dan
 /// diubah saat versi SDK naik. Konsisten dengan pola service lain di
 /// `core/services/` (mis. SosNotificationService).
+///
+/// ── Perubahan arsitektur pengiriman notifikasi ──────────────────────────────
+/// Dulu kelas ini memanggil REST API OneSignal LANGSUNG dari app, memakai
+/// ONESIGNAL_REST_API_KEY yang dibaca dari .env. Karena .env didaftarkan
+/// sebagai asset di pubspec.yaml, key tersebut ikut terkemas ke dalam APK dan
+/// dapat dibaca siapa pun yang memiliki file aplikasi — persis kelas masalah
+/// yang sama dengan PAKASIR_API_KEY sebelumnya.
+///
+/// Sekarang semua pengiriman notifikasi lewat server tepercaya di Vercel
+/// (server/api/send-notification.ts). App hanya mengirim JENIS kejadian dan ID
+/// DOKUMEN Firestore-nya; server yang membaca dokumen itu, memeriksa wewenang
+/// pemanggil lewat Firebase ID Token, lalu menyusun sendiri isi pesan dan
+/// daftar penerimanya. App tidak lagi memegang satu pun kredensial rahasia.
 class OneSignalService {
   OneSignalService._();
 
   static final OneSignalService instance = OneSignalService._();
 
-  /// App ID OneSignal — ini ID publik (aman ada di client), bukan REST API Key.
+  /// App ID OneSignal — ID publik, aman ada di client. Bukan REST API Key.
   static const String appId = 'a01a15ef-73d4-452a-b47e-6273ab20238c';
+
+  /// Endpoint notifikasi pada server tepercaya (Vercel).
+  ///
+  /// Bukan rahasia: URL ini toh terlihat di lalu lintas jaringan. Yang menjaga
+  /// endpoint bukan kerahasiaan alamatnya, melainkan verifikasi Firebase ID
+  /// Token dan pemeriksaan peran di sisi server.
+  ///
+  /// Perbarui bila nama project Vercel berubah.
+  static const String notificationEndpoint =
+      'https://jorenaapp.vercel.app/api/send-notification';
 
   /// Dipasang ke MaterialApp.navigatorKey agar dialog bisa ditampilkan dari
   /// luar widget tree (mis. dari observer push subscription).
@@ -42,7 +65,6 @@ class OneSignalService {
     // Sebelumnya: await requestPermission(true) — bisa hang di beberapa device
     // Android karena dialog izin tidak muncul atau sistem lambat merespons,
     // menyebabkan main() tidak pernah selesai → app stuck di splash.
-    // Solusi: jalankan tanpa await agar startup tidak terhambat.
     OneSignal.Notifications.requestPermission(true).then((granted) {
       debugPrint('[OneSignal] permission granted=$granted '
           'subId=${OneSignal.User.pushSubscription.id} '
@@ -106,345 +128,106 @@ class OneSignalService {
     });
   }
 
-  // ── Kirim push pembayaran berhasil ke user ────────────────────────────────
-  /// Notifikasi ke pemilik tagihan (targeted by External ID = Firebase UID).
-  Future<void> sendPaymentSuccess({
-    required String userId,
-    required String periode,
-    required String jumlah,
-  }) async {
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PENGIRIMAN NOTIFIKASI
+  //
+  // Semua method di bawah ini hanya meneruskan JENIS kejadian + ID DOKUMEN ke
+  // server. Tidak ada judul, isi pesan, maupun daftar penerima yang disusun di
+  // sini — semuanya jadi wewenang server.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /// Kirim permintaan notifikasi ke server tepercaya.
+  ///
+  /// Sengaja tidak melempar exception: notifikasi bersifat pelengkap, sedangkan
+  /// data utamanya sudah tersimpan di Firestore. Kegagalan cukup dicatat di log
+  /// agar tidak pernah mengganggu alur yang sedang dijalankan pengguna.
+  Future<void> _post(String type, String docId) async {
     if (kIsWeb) return;
-    final restKey = dotenv.maybeGet('ONESIGNAL_REST_API_KEY') ?? '';
-    if (restKey.isEmpty) {
-      debugPrint(
-          '[OneSignal] ONESIGNAL_REST_API_KEY kosong — push payment dilewati');
+
+    if (notificationEndpoint.contains('GANTI-DENGAN')) {
+      debugPrint('[OneSignal] notificationEndpoint belum dikonfigurasi — '
+          'push dilewati (type=$type)');
       return;
     }
+
     try {
-      final payload = {
-        'app_id'   : appId,
-        'headings' : {'en': '✅ Pembayaran Berhasil!', 'id': '✅ Pembayaran Berhasil!'},
-        'contents' : {
-          'en': 'Iuran $periode sebesar $jumlah telah dikonfirmasi.',
-          'id': 'Iuran $periode sebesar $jumlah telah dikonfirmasi.',
-        },
-        // Targetkan device berdasarkan External ID (Firebase UID).
-        'include_aliases' : {'external_id': [userId]},
-        'target_channel'  : 'push',
-      };
-      final res = await http.post(
-        Uri.parse('https://api.onesignal.com/notifications'),
-        headers: {
-          'Content-Type' : 'application/json; charset=UTF-8',
-          'Accept'       : 'application/json',
-          'Authorization': 'Key $restKey',
-        },
-        body: jsonEncode(payload),
-      );
-      if (res.statusCode != 200 && res.statusCode != 201) {
-        debugPrint(
-            '[OneSignal] sendPaymentSuccess gagal ${res.statusCode}: ${res.body}');
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        debugPrint('[OneSignal] belum login — push dilewati (type=$type)');
+        return;
       }
-    } catch (e) {
-      debugPrint('[OneSignal] sendPaymentSuccess error: $e');
-    }
-  }
 
-  // ── Kirim push update patroli ke SEMUA WARGA ─────────────────────────────
-  /// Broadcast ke semua device ber-tag role=warga.
-  /// [mulai] true = patroli dimulai, false = patroli selesai.
-  Future<void> sendPatroliUpdate({
-    required bool   mulai,
-    required String blok,
-    required String namaSatpam,
-  }) async {
-    if (kIsWeb) return;
-    final title = mulai
-        ? '🛡️ Patroli Dimulai'
-        : '✅ Patroli Selesai';
-    final body  = mulai
-        ? '$namaSatpam sedang melakukan patroli di $blok.'
-        : '$namaSatpam telah menyelesaikan patroli di $blok.';
-    await _sendToWarga(title: title, body: body);
-  }
+      // ID Token membuktikan identitas pemanggil ke server. Server yang
+      // memutuskan apakah pemanggil berwenang memicu jenis notifikasi ini,
+      // berdasarkan peran yang dibaca dari Firestore (bukan dari app).
+      final idToken = await user.getIdToken();
 
-  // ── Kirim push update bantuan ke USER yang meminta ────────────────────────
-  /// Targeted ke satu user berdasarkan External ID (Firebase UID).
-  Future<void> sendBantuanUpdate({
-    required String userId,
-    required bool   onMyWay, // true = menuju lokasi, false = selesai
-    required String namaSatpam,
-  }) async {
-    if (kIsWeb) return;
-    final restKey = dotenv.maybeGet('ONESIGNAL_REST_API_KEY') ?? '';
-    if (restKey.isEmpty) {
-      debugPrint('[OneSignal] ONESIGNAL_REST_API_KEY kosong — push bantuan dilewati');
-      return;
-    }
-    final title = onMyWay ? '🚶 Satpam Menuju Lokasi' : '✅ Bantuan Selesai';
-    final body  = onMyWay
-        ? '$namaSatpam sedang dalam perjalanan menuju lokasi Anda.'
-        : '$namaSatpam telah menyelesaikan permintaan bantuan Anda.';
-    try {
-      final payload = {
-        'app_id'          : appId,
-        'headings'        : {'en': title, 'id': title},
-        'contents'        : {'en': body,  'id': body},
-        'include_aliases' : {'external_id': [userId]},
-        'target_channel'  : 'push',
-      };
       final res = await http.post(
-        Uri.parse('https://api.onesignal.com/notifications'),
-        headers: {
-          'Content-Type' : 'application/json; charset=UTF-8',
-          'Accept'       : 'application/json',
-          'Authorization': 'Key $restKey',
-        },
-        body: jsonEncode(payload),
-      );
-      if (res.statusCode != 200 && res.statusCode != 201) {
-        debugPrint('[OneSignal] sendBantuanUpdate gagal ${res.statusCode}: ${res.body}');
-      }
-    } catch (e) {
-      debugPrint('[OneSignal] sendBantuanUpdate error: $e');
-    }
-  }
-
-  /// Broadcast ke semua device dengan tag role=warga.
-  Future<void> _sendToWarga({
-    required String title,
-    required String body,
-  }) async {
-    final restKey = dotenv.maybeGet('ONESIGNAL_REST_API_KEY') ?? '';
-    if (restKey.isEmpty) {
-      debugPrint('[OneSignal] ONESIGNAL_REST_API_KEY kosong — push warga dilewati');
-      return;
-    }
-    try {
-      final payload = {
-        'app_id'        : appId,
-        'headings'      : {'en': title, 'id': title},
-        'contents'      : {'en': body,  'id': body},
-        'target_channel': 'push',
-        'filters'       : [
-          {'field': 'tag', 'key': 'role', 'relation': '=', 'value': 'user'},
-        ],
-      };
-      final res = await http.post(
-        Uri.parse('https://api.onesignal.com/notifications'),
-        headers: {
-          'Content-Type' : 'application/json; charset=UTF-8',
-          'Accept'       : 'application/json',
-          'Authorization': 'Key $restKey',
-        },
-        body: jsonEncode(payload),
-      );
-      if (res.statusCode != 200 && res.statusCode != 201) {
-        debugPrint('[OneSignal] _sendToWarga gagal ${res.statusCode}: ${res.body}');
-      }
-    } catch (e) {
-      debugPrint('[OneSignal] _sendToWarga error: $e');
-    }
-  }
-
-  // ── Kirim push update keluhan ke USER pemilik keluhan ────────────────────
-  /// [statusLabel] mis. "Sedang Diproses", "Selesai", "Ditolak".
-  Future<void> sendKeluhanUpdate({
-    required String userId,
-    required String statusLabel,
-    required String judulKeluhan,
-  }) async {
-    if (kIsWeb) return;
-    final restKey = dotenv.maybeGet('ONESIGNAL_REST_API_KEY') ?? '';
-    if (restKey.isEmpty) return;
-    final title = '📋 Update Keluhan';
-    final body  = 'Keluhan "$judulKeluhan" kini berstatus: $statusLabel.';
-    try {
-      final payload = {
-        'app_id'          : appId,
-        'headings'        : {'en': title, 'id': title},
-        'contents'        : {'en': body,  'id': body},
-        'include_aliases' : {'external_id': [userId]},
-        'target_channel'  : 'push',
-      };
-      final res = await http.post(
-        Uri.parse('https://api.onesignal.com/notifications'),
-        headers: {
-          'Content-Type' : 'application/json; charset=UTF-8',
-          'Accept'       : 'application/json',
-          'Authorization': 'Key $restKey',
-        },
-        body: jsonEncode(payload),
-      );
-      if (res.statusCode != 200 && res.statusCode != 201) {
-        debugPrint('[OneSignal] sendKeluhanUpdate gagal ${res.statusCode}: ${res.body}');
-      }
-    } catch (e) {
-      debugPrint('[OneSignal] sendKeluhanUpdate error: $e');
-    }
-  }
-
-  // ── Kirim push berita baru ke SEMUA WARGA ────────────────────────────────
-  Future<void> sendBeritaBaru({required String judul}) async {
-    if (kIsWeb) return;
-    const title = '📰 Pengumuman Baru';
-    final body  = judul;
-    await _sendToWarga(title: title, body: body);
-  }
-
-  // ── Kirim push SOS direspon ke USER pemilik SOS ───────────────────────────
-  Future<void> sendSosUpdate({
-    required String userId,
-    required bool   onMyWay, // true = menuju, false = selesai
-    required String namaSatpam,
-  }) async {
-    if (kIsWeb) return;
-    final restKey = dotenv.maybeGet('ONESIGNAL_REST_API_KEY') ?? '';
-    if (restKey.isEmpty) return;
-    final title = onMyWay ? '🚨 Satpam Menuju Lokasi' : '✅ SOS Selesai Ditangani';
-    final body  = onMyWay
-        ? '$namaSatpam sedang dalam perjalanan menuju lokasi Anda.'
-        : '$namaSatpam telah menyelesaikan penanganan SOS Anda.';
-    try {
-      final payload = {
-        'app_id'          : appId,
-        'headings'        : {'en': title, 'id': title},
-        'contents'        : {'en': body,  'id': body},
-        'include_aliases' : {'external_id': [userId]},
-        'target_channel'  : 'push',
-      };
-      final res = await http.post(
-        Uri.parse('https://api.onesignal.com/notifications'),
-        headers: {
-          'Content-Type' : 'application/json; charset=UTF-8',
-          'Accept'       : 'application/json',
-          'Authorization': 'Key $restKey',
-        },
-        body: jsonEncode(payload),
-      );
-      if (res.statusCode != 200 && res.statusCode != 201) {
-        debugPrint('[OneSignal] sendSosUpdate gagal ${res.statusCode}: ${res.body}');
-      }
-    } catch (e) {
-      debugPrint('[OneSignal] sendSosUpdate error: $e');
-    }
-  }
-
-  // ── Kirim push bantuan baru ke satpam ON DUTY ────────────────────────────
-  Future<void> sendBantuanBaruToSatpam({
-    required String namaWarga,
-    required String blok,
-    required String nomorUnit,
-    required String kategori,
-  }) async {
-    await _notifyOnDutySatpam(
-      title  : '🆘 Permintaan Bantuan Baru',
-      message: '$namaWarga (Blok $blok No. $nomorUnit) meminta bantuan: $kategori.',
-    );
-  }
-
-  // ── Kirim push keluhan baru ke satpam ON DUTY ─────────────────────────────
-  Future<void> sendKeluhanBaruToSatpam({
-    required String namaWarga,
-    required String judul,
-    required String kategori,
-  }) async {
-    await _notifyOnDutySatpam(
-      title  : '📋 Keluhan Baru Masuk',
-      message: '$namaWarga melaporkan keluhan [$kategori]: "$judul".',
-    );
-  }
-
-  // ── Kirim push keluhan di-assign ke satpam TERTENTU ───────────────────────
-  Future<void> sendKeluhanAssigned({
-    required String satpamUid,
-    required String namaWarga,
-    required String judul,
-  }) async {
-    if (kIsWeb) return;
-    final restKey = dotenv.maybeGet('ONESIGNAL_REST_API_KEY') ?? '';
-    if (restKey.isEmpty) return;
-    const title = '📌 Keluhan Ditugaskan ke Anda';
-    final body  = 'Keluhan dari $namaWarga: "$judul" telah ditugaskan kepada Anda.';
-    try {
-      final payload = {
-        'app_id'          : appId,
-        'headings'        : {'en': title, 'id': title},
-        'contents'        : {'en': body,  'id': body},
-        'include_aliases' : {'external_id': [satpamUid]},
-        'target_channel'  : 'push',
-      };
-      final res = await http.post(
-        Uri.parse('https://api.onesignal.com/notifications'),
-        headers: {
-          'Content-Type' : 'application/json; charset=UTF-8',
-          'Accept'       : 'application/json',
-          'Authorization': 'Key $restKey',
-        },
-        body: jsonEncode(payload),
-      );
-      if (res.statusCode != 200 && res.statusCode != 201) {
-        debugPrint('[OneSignal] sendKeluhanAssigned gagal ${res.statusCode}: ${res.body}');
-      }
-    } catch (e) {
-      debugPrint('[OneSignal] sendKeluhanAssigned error: $e');
-    }
-  }
-
-  // ── Kirim push SOS/Panggilan ke satpam yang sedang BERTUGAS ───────────────
-  // Target: device dengan tag role=satpam AND onDuty=true. Push tetap sampai
-  // walau app satpam tertutup. REST API Key dibaca dari .env (tidak hardcode).
-  Future<void> sendSosToOnDutySatpam({
-    required bool isSos,
-    required String namaWarga,
-    required String blok,
-    required String nomorUnit,
-  }) async {
-    final title = isSos ? '🚨 SOS DARURAT!' : '📢 Panggilan Satpam';
-    final message = isSos
-        ? '$namaWarga butuh bantuan darurat — Blok $blok No. $nomorUnit'
-        : '$namaWarga memanggil satpam — Blok $blok No. $nomorUnit';
-    await _notifyOnDutySatpam(title: title, message: message);
-  }
-
-  Future<void> _notifyOnDutySatpam({
-    required String title,
-    required String message,
-  }) async {
-    if (kIsWeb) return;
-    final restKey = dotenv.maybeGet('ONESIGNAL_REST_API_KEY') ?? '';
-    if (restKey.isEmpty) {
-      debugPrint('[OneSignal] ONESIGNAL_REST_API_KEY kosong di .env — push dilewati');
-      return;
-    }
-    try {
-      final payload = {
-        'app_id'        : appId,
-        'headings'      : {'en': title,   'id': title},
-        'contents'      : {'en': message, 'id': message},
-        'priority'      : 10,
-        'target_channel': 'push',
-        // Hanya kirim ke satpam yang sedang bertugas.
-        'filters': [
-          {'field': 'tag', 'key': 'role', 'relation': '=', 'value': 'satpam'},
-          {'operator': 'AND'},
-          {'field': 'tag', 'key': 'onDuty', 'relation': '=', 'value': 'true'},
-        ],
-      };
-      final res = await http.post(
-        Uri.parse('https://api.onesignal.com/notifications'),
+        Uri.parse(notificationEndpoint),
         headers: {
           'Content-Type': 'application/json; charset=UTF-8',
           'Accept': 'application/json',
-          'Authorization': 'Key $restKey',
+          'Authorization': 'Bearer $idToken',
         },
-        body: jsonEncode(payload),
+        body: jsonEncode({'type': type, 'docId': docId}),
       );
-      if (res.statusCode != 200 && res.statusCode != 201) {
-        debugPrint('[OneSignal] kirim gagal ${res.statusCode}: ${res.body}');
+
+      if (res.statusCode != 200) {
+        debugPrint('[OneSignal] $type gagal ${res.statusCode}: ${res.body}');
       }
     } catch (e) {
-      debugPrint('[OneSignal] kirim error: $e');
+      debugPrint('[OneSignal] $type error: $e');
     }
   }
+
+  // ── Warga → satpam yang sedang bertugas ───────────────────────────────────
+  /// Panggilan SOS atau panggilan satpam biasa. Server membedakan keduanya
+  /// dari field `type` pada dokumen `sosalert`.
+  Future<void> sendSosBaru({required String docId}) =>
+      _post('sos_baru', docId);
+
+  /// Permintaan bantuan non-darurat baru (`bantuanrequest`).
+  Future<void> sendBantuanBaru({required String docId}) =>
+      _post('bantuan_baru', docId);
+
+  /// Pengaduan baru masuk (`keluhan`).
+  Future<void> sendKeluhanBaru({required String docId}) =>
+      _post('keluhan_baru', docId);
+
+  // ── Petugas → warga pemilik laporan ───────────────────────────────────────
+  /// Perubahan status penanganan SOS. Server membaca status terkini dokumen
+  /// untuk menentukan bunyi pesannya (menuju lokasi / selesai).
+  Future<void> sendSosUpdate({required String docId}) =>
+      _post('sos_update', docId);
+
+  /// Perubahan status permintaan bantuan.
+  Future<void> sendBantuanUpdate({required String docId}) =>
+      _post('bantuan_update', docId);
+
+  /// Perubahan status pengaduan.
+  Future<void> sendKeluhanUpdate({required String docId}) =>
+      _post('keluhan_update', docId);
+
+  // ── Admin → satpam tertentu ───────────────────────────────────────────────
+  /// Pengaduan ditugaskan ke satpam. Sasarannya dibaca server dari field
+  /// `assignedTo` pada dokumen, bukan dikirim dari app.
+  Future<void> sendKeluhanAssigned({required String docId}) =>
+      _post('keluhan_assigned', docId);
+
+  // ── Siaran ke seluruh warga ───────────────────────────────────────────────
+  /// Berita/pengumuman baru dipublikasikan. Server melewati dokumen yang masih
+  /// berstatus draft.
+  Future<void> sendBeritaBaru({required String docId}) =>
+      _post('berita_baru', docId);
+
+  /// Patroli dimulai atau selesai. Server membedakannya dari status dokumen.
+  Future<void> sendPatroliUpdate({required String docId}) =>
+      _post('patroli_update', docId);
+
+  // ── Catatan: notifikasi pembayaran ────────────────────────────────────────
+  // sendPaymentSuccess() DIHAPUS dari sini. Notifikasi "pembayaran berhasil"
+  // kini dipicu langsung oleh server webhook Pakasir setelah tagihan ditandai
+  // lunas (server/api/pakasir-webhook.ts). Sebelumnya dipicu app setelah
+  // pembayaran selesai — akibatnya warga tidak menerima notifikasi bila
+  // menutup aplikasi lebih dulu, padahal tagihannya sudah lunas.
 }

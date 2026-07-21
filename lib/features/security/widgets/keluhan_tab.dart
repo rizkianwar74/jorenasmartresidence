@@ -87,11 +87,7 @@ class _KeluhanTabState extends State<KeluhanTab>
       assignToName: repo.satpamDisplayName,
     );
     // Notifikasi ke warga pemilik keluhan (fire-and-forget).
-    OneSignalService.instance.sendKeluhanUpdate(
-      userId       : item.uid,
-      statusLabel  : newStatus.label,
-      judulKeluhan : item.judul,
-    );
+    OneSignalService.instance.sendKeluhanUpdate(docId: item.id);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

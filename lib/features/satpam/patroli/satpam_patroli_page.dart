@@ -144,11 +144,7 @@ class _SatpamPatroliPageState extends State<SatpamPatroliPage> {
           _snackBar('Patroli dimulai pukul $jamMulai. Tetap waspada!'));
 
       // Kirim push ke semua warga (fire-and-forget).
-      OneSignalService.instance.sendPatroliUpdate(
-        mulai      : true,
-        blok       : blok,
-        namaSatpam : namaSatpam,
-      );
+      OneSignalService.instance.sendPatroliUpdate(docId: docRef.id);
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
@@ -168,6 +164,9 @@ class _SatpamPatroliPageState extends State<SatpamPatroliPage> {
       final jamSelesai = _nowHHmm();
       final repo       = SecurityRepository.instance;
       final satpamUid  = repo.currentSatpamUid;
+      // Ditangkap sebelum state di-reset di bawah — _activeDocId jadi null
+      // sesudah setState, padahal masih dibutuhkan untuk mengirim notifikasi.
+      final patroliId  = _activeDocId!;
 
       // Upload foto jika ada
       List<String> fotoUrls = [];
@@ -203,12 +202,7 @@ class _SatpamPatroliPageState extends State<SatpamPatroliPage> {
           _snackBar('Patroli selesai pukul $jamSelesai. Laporan tersimpan.'));
 
       // Kirim push ke semua warga (fire-and-forget).
-      final namaSatpam = SecurityRepository.instance.satpamDisplayName;
-      OneSignalService.instance.sendPatroliUpdate(
-        mulai      : false,
-        blok       : _activeBlok.isNotEmpty ? _activeBlok : '-',
-        namaSatpam : namaSatpam,
-      );
+      OneSignalService.instance.sendPatroliUpdate(docId: patroliId);
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);

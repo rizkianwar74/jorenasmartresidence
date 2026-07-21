@@ -1,5 +1,3 @@
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-
 /// Wrapper untuk Pakasir payment gateway.
 ///
 /// Docs: https://pakasir.com/p/docs
@@ -20,9 +18,18 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 class PakasirService {
   PakasirService._();
 
-  // PAKASIR_SLUG aman ada di client — cuma dipakai membentuk URL pembayaran,
-  // bukan kredensial. PAKASIR_API_KEY SENGAJA tidak ada lagi di sini/.env.
-  static String get _slug => dotenv.maybeGet('PAKASIR_SLUG') ?? '';
+  // Slug proyek Pakasir. Aman sebagai konstanta di client — nilainya cuma
+  // dipakai membentuk URL halaman pembayaran dan tetap terlihat di URL yang
+  // dibuka pengguna, jadi memang bukan rahasia. Berbeda dengan PAKASIR_API_KEY
+  // yang hanya hidup di server.
+  //
+  // Sebelumnya dibaca lewat flutter_dotenv. Paket itu sudah dilepas karena
+  // setelah kedua kunci rahasia pindah ke server, tidak ada lagi nilai rahasia
+  // yang perlu dibaca dari .env — sedangkan .env sebagai asset justru ikut
+  // terkemas ke dalam APK.
+  //
+  // GANTI dengan slug proyek Pakasir kamu.
+  static const String _slug = 'jorenaapp';
 
   static const String _payBase = 'https://app.pakasir.com/pay';
 

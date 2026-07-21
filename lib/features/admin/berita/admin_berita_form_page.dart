@@ -144,16 +144,15 @@ class _BeritaFormDialogState extends State<_BeritaFormDialog> {
       if (_isEditMode) {
         await repo.updateBerita(widget.editDoc!.id, data);
       } else {
-        await repo.createBerita({
+        final beritaId = await repo.createBerita({
           ...data,
           'authorUid': repo.currentAdminUid,
           'viewCount': 0,
         });
         // Notifikasi ke semua warga hanya saat publish (bukan draft).
+        // Server juga memeriksa ulang isPublished sebelum menyiarkan.
         if (!asDraft) {
-          OneSignalService.instance.sendBeritaBaru(
-            judul: _judulCtrl.text.trim(),
-          );
+          OneSignalService.instance.sendBeritaBaru(docId: beritaId);
         }
       }
 

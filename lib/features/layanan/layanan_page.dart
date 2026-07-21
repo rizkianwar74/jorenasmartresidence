@@ -8,6 +8,8 @@ import 'lapor_keluhan/lapor_keluhan_page.dart';
 import 'pusat_bantuan/pusat_bantuan_page.dart';
 import 'widgets/service_help_banner.dart';
 // Saat kantin/fasilitas siap: ganti KantinPage → KantinOrderPage, FasilitasPage → FasilitasBookingPage
+import 'kantin/kantin_order_page.dart';
+import 'fasilitas/fasilitas_booking_page.dart';
 import 'kantin/kantin_page.dart';
 import 'fasilitas/fasilitas_page.dart';
 
@@ -117,7 +119,7 @@ class LayananPage extends StatelessWidget {
                                   handler = () => Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (_) => const FasilitasPage(),
+                                      builder: (_) => const FasilitasBookingPage(),
                                     ),
                                   );
                                 } else if (s.title == 'Darurat') {
@@ -131,7 +133,7 @@ class LayananPage extends StatelessWidget {
                                   handler = () => Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (_) => const KantinPage(),
+                                      builder: (_) => const KantinOrderPage(),
                                     ),
                                   );
                                 }

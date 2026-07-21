@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:firebase_core/firebase_core.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
 import 'app.dart';
 import 'core/services/sos_notification_service.dart';
@@ -10,7 +9,9 @@ import 'core/services/onesignal_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: '.env');
+  // Tidak ada lagi dotenv.load(): app sudah tidak menyimpan kredensial apa pun.
+  // Seluruh kunci rahasia kini hanya hidup sebagai environment variable di
+  // server Vercel (server/api/).
   await initializeDateFormatting('id_ID', null);
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
