@@ -38,6 +38,18 @@ class _TagihanPageState extends State<TagihanPage> {
   // Batas praktis stepper advance (60 bulan = 5 tahun).
   static const int _maxAdvanceMonths = 60;
 
+  @override
+  void initState() {
+    super.initState();
+    // Bersihkan sisa pembayaran dimuka yang batal dari sesi-sesi sebelumnya.
+    // Dijalankan saat halaman dibuka (bukan saat sedang membayar), sehingga
+    // dokumen 'pending' yang tersisa pasti dari percobaan yang tidak selesai.
+    final uid = AuthRepository.currentUid;
+    if (uid != null) {
+      PaymentRepository.cleanupAbandonedPending(uid).catchError((_) => 0);
+    }
+  }
+
   // ── Generate advance list ──────────────────────────────────────────────────
   // Mengembalikan [count] bulan advance mulai dari bulan setelah bulan berjalan.
   // Bulan yang sudah ada di [existingAdvance] dipakai apa adanya;
@@ -123,6 +135,11 @@ class _TagihanPageState extends State<TagihanPage> {
           nomorUnit   : t.nomorUnit,
           bulanIndex  : t.bulanIndex,
           tahun       : t.tahun,
+          // Dokumen bulan dimuka ditandai 'pending', bukan 'belumBayar', agar
+          // bila pembayaran ini batal, sisanya bisa dibersihkan dengan aman
+          // (lihat cleanupAbandonedPending) tanpa mengganggu tunggakan maupun
+          // tagihan dimuka buatan admin.
+          status      : StatusTagihan.pending,
         );
       }
 

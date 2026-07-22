@@ -96,10 +96,12 @@ class TagihanCard extends StatelessWidget {
             const SizedBox(height: 2),
 
             if (sudahLunas) ...[
-              // Tampilan lunas
+              // Tidak ada tagihan yang jatuh tempo — tunggakan & bulan berjalan
+              // sudah lunas. Bulan dimuka yang belum jatuh tempo tidak dianggap
+              // tagihan di sini.
               const SizedBox(height: 12),
               Text(
-                'Tagihan Anda Lunas',
+                'Tidak ada tagihan',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.inter(

@@ -311,12 +311,29 @@ class _HomePageState extends State<HomePage> {
                     : PaymentRepository.watchUserTagihan(uid),
                 builder: (context, tagihanSnap) {
                   final list = tagihanSnap.data ?? const <TagihanModel>[];
-                  final unpaid = list.unpaidSorted;
-                  final adaUnpaid = unpaid.isNotEmpty;
-                  final sudahLunas = list.isNotEmpty && !adaUnpaid;
-                  final jumlahFmt = adaUnpaid
-                      ? formatRupiah(list.totalUnpaid)
-                      : formatRupiah(PaymentRepository.iuranBulanan);
+                  // Kartu beranda hanya memperhitungkan tagihan yang benar-benar
+                  // WAJIB, yaitu tunggakan + bulan berjalan (periodeKey <= bulan
+                  // ini). Bulan dimuka yang belum jatuh tempo — termasuk dokumen
+                  // dimuka yang terlanjur terbuat tapi belum dibayar — TIDAK
+                  // dihitung di sini, supaya angka & status di beranda konsisten
+                  // dengan halaman detail Tagihan (yang memisahkan wajib vs
+                  // advance). Tanpa filter ini, bulan dimuka menggelembungkan
+                  // nominal dan membuat bulan berjalan yang sudah lunas tetap
+                  // tampil "Belum Bayar".
+                  final nowKey = () {
+                    final n = DateTime.now();
+                    return n.year * 100 + n.month;
+                  }();
+                  final wajibUnpaid = list
+                      .where((t) =>
+                          t.status != StatusTagihan.lunas &&
+                          t.periodeKey <= nowKey)
+                      .toList();
+                  final adaTagihan = wajibUnpaid.isNotEmpty;
+                  final sudahLunas = !adaTagihan;
+                  final totalWajib =
+                      wajibUnpaid.fold<int>(0, (s, t) => s + t.jumlah);
+                  final jumlahFmt = formatRupiah(totalWajib);
 
                   return SingleChildScrollView(
                      padding: const EdgeInsets.only(bottom: 120),

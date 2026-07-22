@@ -41,16 +41,45 @@ service cloud.firestore {
       allow list: if isAdmin() ||
         (isAuth() && resource.data.userId == request.auth.uid);
 
+      // Warga boleh membuat tagihan miliknya dengan status:
+      //   - 'belumBayar' : tagihan wajib normal
+      //   - 'pending'    : dokumen bulan dimuka yang dibuat saat memulai
+      //                    pembayaran online (dibedakan dari 'belumBayar' agar
+      //                    sisa percobaan yang batal bisa dibersihkan dengan
+      //                    aman tanpa menyentuh tagihan dimuka buatan admin).
+      // status:'lunas' TETAP tidak boleh diset warga — itu eksklusif admin /
+      // server webhook (Admin SDK).
+      //
+      // PENTING: jumlah dikunci ke tarif iuran (30000) untuk dokumen buatan
+      // warga. Tanpa ini, warga bisa membuat dokumen dimuka ber-jumlah kecil
+      // (mis. 1) lalu melunasi bulan itu murah — verifikasi total nominal di
+      // webhook tidak menolongnya, karena ia hanya memastikan "yang dibayar ==
+      // total dokumen", bukan "total dokumen itu benar". Nilai 30000 HARUS sama
+      // dengan PaymentRepository.iuranBulanan di kode Dart; kalau tarif berubah,
+      // ubah di kedua tempat. Admin (isAdmin) dikecualikan — boleh set jumlah
+      // apa pun (tunggakan tarif lama, penyesuaian manual, dsb).
+      //
+      // tanggalBayar/metodeBayar/orderId dipaksa null saat create — mengikuti
+      // bentuk dokumen dari createTagihan(). Warga baru boleh mengisi orderId
+      // lewat update (lihat allow update di bawah), bukan saat create.
       allow create: if isAdmin() ||
         (isAuth() &&
          request.resource.data.userId == request.auth.uid &&
-         request.resource.data.status == 'belumBayar');
+         request.resource.data.status in ['belumBayar', 'pending'] &&
+         request.resource.data.jumlah == 30000 &&
+         request.resource.data.tanggalBayar == null &&
+         request.resource.data.metodeBayar == null &&
+         request.resource.data.orderId == null);
 
       allow update: if isAdmin() ||
         (isOwner('userId') &&
          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['orderId']));
 
-      allow delete: if isAdmin();
+      // Warga hanya boleh menghapus dokumen 'pending' MILIKNYA SENDIRI, yaitu
+      // sisa pembayaran dimuka yang batal. Tagihan 'belumBayar' (tunggakan /
+      // tagihan admin) dan 'lunas' (riwayat) tidak bisa dihapus warga.
+      allow delete: if isAdmin() ||
+        (isOwner('userId') && resource.data.status == 'pending');
     }
 
     // ── patroli ────────────────────────────────────────────

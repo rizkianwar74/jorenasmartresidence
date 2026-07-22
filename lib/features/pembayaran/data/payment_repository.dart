@@ -11,6 +11,12 @@ class PaymentRepository {
   static const _collection = 'tagihan';
 
   /// Iuran bulanan default (Rp 30.000/rumah).
+  ///
+  /// PENTING: nilai ini dikunci juga di firestore.rules (create tagihan warga
+  /// mensyaratkan `jumlah == 30000`). Kalau tarif diubah di sini, ubah pula
+  /// angka di firestore.rules lalu deploy ulang rules — kalau tidak, warga
+  /// tidak akan bisa membuat tagihan dimuka (create ditolak). Admin tidak
+  /// terpengaruh karena melewati aturan tersebut.
   static const int iuranBulanan = 30000;
 
   /// Stream tagihan milik satu user (untuk halaman Tagihan user).
@@ -352,8 +358,16 @@ class PaymentRepository {
     return result;
   }
 
-  /// Buat tagihan untuk bulan/tahun tertentu — dipakai admin untuk tagihan
-  /// di muka (warga bayar tunai di tempat, minta dibuatkan tagihan bulan depan).
+  /// Buat tagihan untuk bulan/tahun tertentu.
+  ///
+  /// Dua pemakaian dengan [status] berbeda:
+  ///   - Admin membuat tagihan di muka (warga bayar tunai) → `belumBayar`.
+  ///   - Warga memulai pembayaran online bulan dimuka        → `pending`.
+  ///
+  /// Status `pending` membedakan dokumen dimuka hasil pembayaran online dari
+  /// tagihan dimuka sah buatan admin (yang `belumBayar`). Keduanya sama-sama
+  /// berperiode masa depan, jadi tanpa pembeda ini, dokumen sisa pembayaran
+  /// yang batal tidak bisa dibersihkan tanpa berisiko menghapus tagihan admin.
   ///
   /// Return `true` kalau berhasil dibuat, `false` kalau sudah ada (idempotent).
   static Future<bool> createTagihanForMonth({
@@ -365,6 +379,7 @@ class PaymentRepository {
     required int bulanIndex, // 1-12
     required int tahun,
     int jumlah = iuranBulanan,
+    StatusTagihan status = StatusTagihan.belumBayar,
   }) async {
     final id =
         'tagihan-$tahun-${bulanIndex.toString().padLeft(2, '0')}-$userId';
@@ -388,8 +403,53 @@ class PaymentRepository {
       tahun       : tahun,
       jumlah      : jumlah,
       jatuhTempo  : jatuhTempo,
+      status      : status,
     );
     return true;
+  }
+
+  /// Ambang usia sebuah dokumen 'pending' dianggap benar-benar batal.
+  ///
+  /// Melindungi dari kondisi balapan: bila warga menyelesaikan pembayaran lalu
+  /// SEGERA kembali ke halaman Tagihan sebelum webhook sempat menandai lunas,
+  /// dokumen 'pending' yang masih baru TIDAK boleh dihapus — kalau terhapus,
+  /// webhook nanti kehilangan dokumen itu dan (karena pengecekan total nominal)
+  /// menolak seluruh pembayaran yang sebenarnya sah. 30 menit jauh melampaui
+  /// waktu proses webhook maupun masa berlaku QRIS Pakasir.
+  static const Duration _pendingStale = Duration(minutes: 30);
+
+  /// Bersihkan dokumen 'pending' milik [userId] yang sudah kedaluwarsa — sisa
+  /// pembayaran dimuka yang batal (QRIS ditutup tanpa menyelesaikan pembayaran).
+  ///
+  /// Hanya menyentuh status 'pending' yang usianya melewati [_pendingStale];
+  /// tagihan wajib ('belumBayar') dan riwayat ('lunas') tidak pernah terhapus,
+  /// begitu pula 'pending' yang masih baru (kemungkinan sedang diproses).
+  ///
+  /// Query hanya memfilter userId (status & usia disaring di sisi Dart) supaya
+  /// tidak butuh composite index Firestore.
+  static Future<int> cleanupAbandonedPending(String userId) async {
+    final snap = await _db
+        .collection(_collection)
+        .where('userId', isEqualTo: userId)
+        .get();
+
+    final now = DateTime.now();
+    final stale = snap.docs.where((d) {
+      final data = d.data();
+      if ((data['status'] as String?) != 'pending') return false;
+      final ts = data['createdAt'];
+      // createdAt belum tersinkron (baru dibuat) → anggap masih baru, jangan hapus.
+      if (ts is! Timestamp) return false;
+      return now.difference(ts.toDate()) > _pendingStale;
+    }).toList();
+    if (stale.isEmpty) return 0;
+
+    final batch = _db.batch();
+    for (final d in stale) {
+      batch.delete(d.reference);
+    }
+    await batch.commit();
+    return stale.length;
   }
 
   /// Migrasi satu kali: update jumlah SEMUA tagihan yang BELUM lunas
