@@ -189,6 +189,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
+    // 2b. Cocokkan nominal yang dibayar dengan TOTAL tagihan yang akan dilunasi.
+    //
+    // Tanpa langkah ini, verifikasi di atas hanya memastikan "jumlah yang
+    // dibayar == jumlah yang dicatat Pakasir", BUKAN "== total tagihan yang
+    // ditandai lunas". URL pembayaran Pakasir memuat nominal secara terbuka
+    // (mis. .../pay/slug/210000?order_id=...) dan dibuka di browser biasa,
+    // sehingga warga bisa menurunkannya (mis. jadi 30000) lalu membayar
+    // seadanya — dan seluruh tagihan ber-orderId sama akan ikut dilunasi.
+    //
+    // Di sinilah nominal dikunci ke total tagihan sebenarnya. Kalau tidak
+    // sama, JANGAN tandai lunas apa pun.
+    const totalTagihan = snap.docs.reduce(
+      (sum, doc) => sum + ((doc.get('jumlah') as number | undefined) ?? 0),
+      0,
+    );
+
+    if (verified.amount !== totalTagihan) {
+      console.error('[pakasir-webhook] Nominal tidak sama dengan total tagihan', {
+        orderId: body.order_id,
+        dibayar: verified.amount,
+        totalTagihan,
+        jumlahDokumen: snap.docs.length,
+      });
+      // Balas 200 supaya Pakasir tidak retry terus — kejadian sudah dicatat.
+      res.status(200).json({
+        ok: false,
+        message: 'Nominal pembayaran tidak sesuai total tagihan',
+      });
+      return;
+    }
+
     // 3. Tandai lunas — batch write, atomic untuk semua dokumen sekaligus.
     const tanggalBayar = formatTanggalBayar(verified.completed_at ?? body.completed_at);
     const metodeBayar = (verified.payment_method ?? body.payment_method ?? 'QRIS').toUpperCase();
