@@ -10,9 +10,10 @@ Aplikasi manajemen perumahan berbasis Flutter dan Firebase. Mendukung tiga peran
 - Dashboard warga — berita, layanan, keluhan, tagihan, komunitas
 - Dashboard satpam — patroli, catat tamu, laporan insiden, keluhan warga
 - Dashboard admin — manajemen warga, keamanan, laporan, berita, tamu, billing
-- Pembayaran iuran via **Pakasir** (QRIS) — status lunas diverifikasi oleh server webhook terpisah, bukan client, lihat [Pembayaran & Webhook Server](#pembayaran--webhook-server)
+- Pembayaran iuran via **Pakasir** (QRIS) — status lunas diverifikasi oleh server webhook terpisah, bukan client, lihat [Server Backend (Vercel)](#server-backend-vercel)
 - SOS & Bantuan Satpam realtime via Firestore
-- Notifikasi push via **OneSignal** + notifikasi lokal untuk SOS
+- Notifikasi push via **OneSignal** + notifikasi lokal untuk SOS — pengiriman notifikasi dilakukan oleh **server tepercaya** (Vercel), bukan langsung dari app, sehingga REST API Key OneSignal tidak ikut terkemas ke APK (lihat [Server Backend (Vercel)](#server-backend-vercel))
+- Aplikasi **tidak menyimpan satu pun kredensial rahasia** — seluruh secret (`PAKASIR_API_KEY`, `ONESIGNAL_REST_API_KEY`, service account Firebase) hanya hidup sebagai environment variable di server Vercel. App **tidak lagi memakai file `.env`/`flutter_dotenv`**
 - Foto (bukti keluhan, bantuan, patroli, berita, profil) disimpan sebagai **base64 data URI langsung di field Firestore** (mis. `fotoUrls`, `imageUrl`, `photoUrl`) — project ini **tidak** memakai Firebase Storage sama sekali (tidak ada paket `firebase_storage` di `pubspec.yaml`)
 
 ---
@@ -53,17 +54,19 @@ cd aplikasismartresidence
 flutter pub get
 ```
 
-### 3. Environment Variables
+### 3. Konfigurasi Client (tidak perlu `.env`)
 
-Aplikasi butuh file `.env` (di-gitignore, tidak ikut commit) untuk API key yang tidak sensitif di sisi client:
+App **tidak lagi memakai file `.env`** — paket `flutter_dotenv` sudah dilepas. Semua nilai yang tidak sensitif ditulis langsung sebagai konstanta di kode, dan semua nilai rahasia sudah dipindah ke server (lihat [Server Backend (Vercel)](#server-backend-vercel)). Jadi `flutter pub get` lalu `flutter run` sudah cukup, **tidak ada langkah `cp .env.example .env`**.
 
-```bash
-cp .env.example .env
-```
+Kalau perlu mengganti konfigurasi client (mis. untuk deployment sendiri), ubah konstanta berikut langsung di kode:
 
-Isi `PAKASIR_SLUG` (nama proyek di dashboard Pakasir) dan `ONESIGNAL_REST_API_KEY` (dari dashboard OneSignal → Settings → Keys & IDs). **Tanpa file ini, `flutter run` akan gagal.**
+| Nilai | Lokasi | Keterangan |
+|-------|--------|------------|
+| Slug Pakasir | `PakasirService._slug` di `lib/core/services/pakasir_service.dart` | Nama proyek Pakasir; bukan rahasia (ikut tampil di URL pembayaran) |
+| OneSignal App ID | `OneSignalService.appId` di `lib/core/services/onesignal_service.dart` | ID publik, aman di client |
+| Endpoint notifikasi | `OneSignalService.notificationEndpoint` di file yang sama | URL server Vercel, perbarui bila nama project Vercel berubah |
 
-> `PAKASIR_API_KEY` **sengaja tidak ada** di `.env` client — key itu sensitif dan hanya hidup di server webhook (`server/pakasir-webhook/.env`), lihat bagian [Pembayaran & Webhook Server](#pembayaran--webhook-server).
+> `PAKASIR_API_KEY` dan `ONESIGNAL_REST_API_KEY` **tidak ada di client sama sekali** — keduanya sensitif dan hanya hidup sebagai environment variable di server (`server/.env` untuk dev lokal / Vercel Environment Variables untuk production). Lihat [Server Backend (Vercel)](#server-backend-vercel).
 
 ### 4. Firebase
 
@@ -149,20 +152,34 @@ flutter build appbundle --release
 
 ---
 
-## Pembayaran & Webhook Server
+## Server Backend (Vercel)
+
+Semua logika yang butuh kredensial rahasia berjalan di satu server serverless (Node.js/TypeScript) di folder `server/`, deploy ke Vercel. App Flutter tidak memegang satu pun secret. Ada dua endpoint:
+
+| Endpoint | File | Fungsi |
+|----------|------|--------|
+| `/api/pakasir-webhook` | `server/api/pakasir-webhook.ts` | Menerima webhook pembayaran Pakasir, verifikasi ulang, tandai tagihan lunas di Firestore |
+| `/api/send-notification` | `server/api/send-notification.ts` | Mengirim push OneSignal setelah memverifikasi Firebase ID Token & peran pemanggil |
+
+Kode bersama ada di `server/lib/` (`firebase.ts`, `notifications.ts`, `onesignal.ts`). Cara deploy & set environment variables ada di `server/README.md`.
+
+### Verifikasi pembayaran
 
 Verifikasi status pembayaran Pakasir **tidak** dilakukan oleh app Flutter (client tidak bisa dipercaya untuk keputusan finansial). Alurnya:
 
 ```
-Pakasir → webhook → server/pakasir-webhook/ (Vercel) → verifikasi ulang ke Pakasir
+Pakasir → webhook → server/api/pakasir-webhook.ts (Vercel) → verifikasi ulang ke Pakasir
         → tulis status:'lunas' ke Firestore via Firebase Admin SDK
         → app Flutter listen perubahan itu lewat Firestore stream
 ```
 
-- Kode server ada di `server/pakasir-webhook/` (Node.js/TypeScript, deploy ke Vercel — lihat `server/pakasir-webhook/README.md` untuk cara deploy & set environment variables).
 - Latar belakang masalah, keputusan arsitektur, dan status implementasi ada di `docs/payment_webhook_fix_prompt.md`.
 - Firestore Security Rules untuk collection `tagihan` (di `firestore.rules`) membatasi warga hanya boleh mengubah field `orderId` miliknya sendiri — field `status`/`tanggalBayar`/`metodeBayar` eksklusif ditulis admin (manual) atau server webhook (Admin SDK, bypass rules).
 - Project ini **tidak** menggunakan Firebase Cloud Functions/Blaze plan untuk apa pun, termasuk seed tagihan bulanan otomatis — lihat catatan di `functions/index.js` (disimpan sebagai referensi, tidak di-deploy) dan `PaymentRepository.ensureAllMissingTagihan()` sebagai gantinya yang jalan dari client.
+
+### Pengiriman notifikasi
+
+Dulu app memanggil REST API OneSignal langsung memakai `ONESIGNAL_REST_API_KEY` yang dibaca dari `.env` — dan karena `.env` ikut dikemas sebagai asset, key itu bocor ke setiap APK. Sekarang app hanya mengirim jenis kejadian + ID dokumen Firestore ke `server/api/send-notification.ts`; server memverifikasi Firebase ID Token pemanggil, membaca dokumennya, lalu menyusun sendiri isi pesan dan daftar penerima. REST API Key hanya hidup di server.
 
 ---
 
@@ -171,7 +188,6 @@ Pakasir → webhook → server/pakasir-webhook/ (Vercel) → verifikasi ulang ke
 ```
 lib/
 ├── core/
-│   ├── constants/        # Konstanta umum
 │   ├── data/              # Repository lintas-fitur (keluhan, SOS, bantuan)
 │   ├── router/             # AppRouter (named routes)
 │   ├── services/           # Pakasir, OneSignal, SOS notification
@@ -198,8 +214,11 @@ assets/
 ├── images/                 # Logo dan gambar
 └── sounds/                  # Ringtone SOS & notifikasi
 
-server/
-└── pakasir-webhook/         # Server webhook verifikasi pembayaran (Vercel, terpisah dari app Flutter)
+server/                      # Server serverless (Vercel) — terpisah dari app Flutter
+├── api/
+│   ├── pakasir-webhook.ts   # Endpoint verifikasi pembayaran Pakasir
+│   └── send-notification.ts # Endpoint pengiriman push OneSignal
+└── lib/                      # Kode bersama (firebase, notifications, onesignal)
 
 functions/                   # Cloud Functions — TIDAK di-deploy (project tidak pakai Blaze), disimpan sebagai referensi
 ```
@@ -232,8 +251,8 @@ flutter clean && flutter pub get
 **Flutter doctor menunjukkan masalah Android SDK**
 → Buka Android Studio → SDK Manager → install Android SDK 33+
 
-**`flutter run` gagal / dotenv error saat start**
-→ Pastikan `.env` sudah dibuat dari `.env.example` (lihat langkah Instalasi #3) dan berisi `PAKASIR_SLUG` + `ONESIGNAL_REST_API_KEY`.
+**Notifikasi push tidak muncul**
+→ Pengiriman notifikasi dilakukan server (`server/api/send-notification.ts`), bukan app. Pastikan server sudah di-deploy ke Vercel, `ONESIGNAL_APP_ID` + `ONESIGNAL_REST_API_KEY` sudah diset di Environment Variables, dan `OneSignalService.notificationEndpoint` di app menunjuk ke URL Vercel yang benar. Lihat `server/README.md`.
 
 **APK ter-install tapi macet di splash screen**
 → Biasanya mismatch nama resource icon (`@mipmap/ic_launcher` vs `@mipmap/launcher_icon` dari `flutter_launcher_icons`). Cek `lib/core/services/sos_notification_service.dart` dan `lib/main.dart`.
@@ -242,7 +261,7 @@ flutter clean && flutter pub get
 → Periksa `firestore.rules` sudah ter-deploy (`firebase deploy --only firestore:rules`) dan sesuai dengan operasi yang dilakukan (mis. warga tidak boleh menulis field `status` di `tagihan`, lihat bagian Pembayaran & Webhook Server).
 
 **Status tagihan tidak berubah jadi lunas setelah bayar**
-→ Ini ditulis oleh server webhook, bukan app. Pastikan `server/pakasir-webhook/` sudah di-deploy ke Vercel, environment variables sudah diset, dan webhook URL sudah didaftarkan di dashboard Pakasir. Lihat `server/pakasir-webhook/README.md`.
+→ Ini ditulis oleh server webhook, bukan app. Pastikan `server/` sudah di-deploy ke Vercel, environment variables sudah diset, dan webhook URL sudah didaftarkan di dashboard Pakasir. Lihat `server/README.md`.
 
 **Foto gagal tersimpan / error saat kirim keluhan-bantuan-patroli**
 → Foto disimpan sebagai base64 di field Firestore (bukan Firebase Storage), jadi ukurannya ikut menambah ukuran dokumen. Firestore membatasi ukuran dokumen maksimal ±1 MiB — kalau foto terlalu besar/banyak dalam satu laporan, penyimpanan bisa gagal. Kompres/batasi resolusi foto di `image_picker` kalau ini terjadi.
@@ -255,9 +274,8 @@ flutter clean && flutter pub get
 - [Firebase Auth](https://firebase.google.com/docs/auth) — Autentikasi
 - [Cloud Firestore](https://firebase.google.com/docs/firestore) — Database realtime (termasuk foto, disimpan sebagai base64 — **tidak** ada Firebase Storage di project ini)
 - [Pakasir](https://pakasir.com) — Payment gateway QRIS untuk iuran warga
-- [Vercel](https://vercel.com) — Hosting server webhook verifikasi pembayaran (`server/pakasir-webhook/`)
-- [OneSignal](https://onesignal.com) — Push notification
-- [flutter_dotenv](https://pub.dev/packages/flutter_dotenv) — Konfigurasi `.env` di client
+- [Vercel](https://vercel.com) — Hosting server serverless: verifikasi pembayaran + pengiriman notifikasi (`server/`)
+- [OneSignal](https://onesignal.com) — Push notification (dikirim dari server, bukan client)
 - [Google Fonts](https://pub.dev/packages/google_fonts) — Tipografi
 - [flutter_local_notifications](https://pub.dev/packages/flutter_local_notifications) — Notifikasi lokal
 

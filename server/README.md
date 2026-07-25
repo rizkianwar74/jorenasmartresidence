@@ -1,9 +1,16 @@
-# Pakasir Webhook — Smart Residence
+# Server Backend — Smart Residence
 
-Server kecil yang menerima webhook pembayaran dari Pakasir, memverifikasi ulang
-ke API resmi Pakasir, lalu menandai tagihan lunas di Firestore lewat Firebase
-Admin SDK. Dibuat supaya keputusan "pembayaran sukses atau tidak" **tidak lagi
-ditentukan oleh app Flutter (klien)**, melainkan oleh server ini.
+Server serverless (Node.js/TypeScript, deploy ke Vercel) yang memegang semua
+kredensial rahasia sistem, supaya app Flutter (klien) **tidak menyimpan satu pun
+secret**. Ada dua tugas utama:
+
+1. **Verifikasi pembayaran** — menerima webhook Pakasir, memverifikasi ulang ke
+   API resmi Pakasir, lalu menandai tagihan lunas di Firestore lewat Firebase
+   Admin SDK. Keputusan "pembayaran sukses atau tidak" **tidak lagi ditentukan
+   oleh app Flutter**, melainkan oleh server ini.
+2. **Pengiriman notifikasi** — mengirim push OneSignal setelah memverifikasi
+   Firebase ID Token & peran pemanggil, supaya `ONESIGNAL_REST_API_KEY` tidak
+   ikut terkemas ke dalam APK.
 
 Lihat `docs/payment_webhook_fix_prompt.md` di root project untuk konteks
 lengkap kenapa perubahan ini diperlukan.
@@ -11,20 +18,25 @@ lengkap kenapa perubahan ini diperlukan.
 ## Struktur
 
 ```
-server/pakasir-webhook/
+server/
 ├── api/
-│   └── pakasir-webhook.ts   ← handler webhook (Vercel serverless function)
+│   ├── pakasir-webhook.ts    ← handler webhook pembayaran (endpoint)
+│   └── send-notification.ts  ← handler pengiriman push OneSignal (endpoint)
+├── lib/
+│   ├── firebase.ts           ← inisialisasi Firebase Admin SDK
+│   ├── notifications.ts      ← penyusunan isi & penerima notifikasi
+│   └── onesignal.ts          ← wrapper REST API OneSignal
 ├── package.json
 ├── tsconfig.json
 ├── .env.example
 └── README.md (file ini)
 ```
 
-Vercel otomatis mendeteksi setiap file di `api/` sebagai satu endpoint. File
-`api/pakasir-webhook.ts` akan menjadi endpoint:
+Vercel otomatis mendeteksi setiap file di `api/` sebagai satu endpoint:
 
 ```
 https://<nama-project-vercel>.vercel.app/api/pakasir-webhook
+https://<nama-project-vercel>.vercel.app/api/send-notification
 ```
 
 ## 1. Deploy ke Vercel
@@ -36,10 +48,10 @@ dan Vercel CLI:
 npm install -g vercel
 ```
 
-Dari dalam folder `server/pakasir-webhook/`:
+Dari dalam folder `server/`:
 
 ```bash
-cd server/pakasir-webhook
+cd server
 vercel login
 vercel
 ```
@@ -55,13 +67,15 @@ vercel --prod
 ## 2. Set Environment Variables di Vercel
 
 Buka **Vercel Dashboard → project ini → Settings → Environment Variables**,
-tambahkan 3 variabel berikut (isi persis seperti di `.env.example`):
+tambahkan variabel berikut (isi persis seperti di `.env.example`):
 
 | Key | Isi |
 |---|---|
 | `PAKASIR_SLUG` | Slug project Pakasir kamu |
 | `PAKASIR_API_KEY` | API Key dari dashboard Pakasir → Settings → API Key |
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | Seluruh isi file JSON service account Firebase |
+| `ONESIGNAL_APP_ID` | App ID dari dashboard OneSignal → Settings → Keys & IDs |
+| `ONESIGNAL_REST_API_KEY` | REST API Key OneSignal (regenerate dulu jika sempat bocor ke APK lama) |
 
 Cara dapat `FIREBASE_SERVICE_ACCOUNT_JSON`:
 Firebase Console → Project Settings (ikon gerigi) → Service Accounts →
@@ -103,7 +117,7 @@ verifikasi, memudahkan debugging tanpa perlu akses device manapun.
 ## Development lokal (opsional)
 
 ```bash
-cd server/pakasir-webhook
+cd server
 npm install
 cp .env.example .env   # isi manual
 vercel dev
